@@ -91,6 +91,10 @@ type Runtime struct {
 	// against each tool call rather than the cycle.
 	ToolBinder   *ToolBinder
 	ToolPolicies []*Policy
+
+	// Librarian retrieves relevant Knowledge (RAG) when a `## Knowledge`
+	// corpus is declared in memory.md. Nil leaves the research stage a no-op.
+	Librarian *Librarian
 }
 
 // NewRuntime builds a Runtime with deterministic defaults for both seams and

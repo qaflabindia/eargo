@@ -24,7 +24,7 @@ type LMReasoner struct {
 func NewLMReasoner(lm LM) LMReasoner { return LMReasoner{LM: lm} }
 
 // Reason runs the intent through the model and returns the decision text.
-func (r LMReasoner) Reason(ctx context.Context, rt *Runtime, intent Intent, plan []*Workflow) (any, error) {
+func (r LMReasoner) Reason(ctx context.Context, rt *Runtime, intent Intent, plan []*Workflow, research *Research) (any, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -65,6 +65,11 @@ func (r LMReasoner) Reason(ctx context.Context, rt *Runtime, intent Intent, plan
 		if narrative := rt.Strategy.Ontology.Render(); narrative != "" {
 			reasoningContext["_operating_strategy"] = narrative
 		}
+	}
+	// Retrieved knowledge is reference material -- it informs the decision,
+	// it never instructs the runtime.
+	if research != nil && research.Rendered != "" {
+		reasoningContext["_retrieved_knowledge"] = research.Rendered
 	}
 
 	var decision string

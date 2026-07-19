@@ -40,7 +40,7 @@ func (DeterministicJudge) Judge(_ context.Context, policy *Policy, context map[s
 // deliberation -- the most I/O-heavy stage in the live runtime -- is
 // cancellable.
 type Reasoner interface {
-	Reason(ctx context.Context, r *Runtime, intent Intent, plan []*Workflow) (any, error)
+	Reason(ctx context.Context, r *Runtime, intent Intent, plan []*Workflow, research *Research) (any, error)
 }
 
 // DefaultReasoner is the dependency-free deliberation engine: it renders the
@@ -51,7 +51,7 @@ type DefaultReasoner struct{}
 
 // Reason produces the deterministic decision. It honours ctx cancellation
 // before doing any work so a cancelled cycle stops promptly.
-func (DefaultReasoner) Reason(ctx context.Context, r *Runtime, intent Intent, plan []*Workflow) (any, error) {
+func (DefaultReasoner) Reason(ctx context.Context, r *Runtime, intent Intent, plan []*Workflow, _ *Research) (any, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

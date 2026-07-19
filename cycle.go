@@ -16,6 +16,7 @@ type Cycle struct {
 	Selected   []*Process     // select
 	Plan       []*Workflow    // compose + schedule
 	Recalled   string         // recall
+	Research   *Research      // research (RAG)
 	Decision   any            // reason
 	Data       map[string]any // formalize: conformant contract deliverable fields
 	Evidence   *Evidence      // evidence
@@ -45,6 +46,7 @@ func defaultPipeline() []Stage {
 		governStage{scope: "Workflow policy", workflow: true},
 		delegateStage{},
 		recallStage{},
+		researchStage{},
 		reasonStage{},
 		formalizeStage{},
 		evidenceStage{},

@@ -112,6 +112,7 @@ func (l *loader) load(name string) (*Runtime, error) {
 		return nil, err
 	}
 	applyMemoryStrategy(runtime, l.read("memory"))
+	l.loadKnowledge(runtime)
 	return runtime, nil
 }
 
@@ -385,6 +386,30 @@ func applyPolicyScopes(runtime *Runtime, policies map[string]*Policy, scopes map
 		}
 	}
 	return nil
+}
+
+// loadKnowledge reads the declared `## Knowledge` sources (resolved against
+// the stack directory), chunks them into a corpus, and attaches a Librarian.
+// A missing source file is skipped gracefully so a stack loads without it.
+func (l *loader) loadKnowledge(runtime *Runtime) {
+	if runtime.Strategy == nil || len(runtime.Strategy.KnowledgeSources) == 0 {
+		return
+	}
+	corpus := &Knowledge{}
+	for _, src := range runtime.Strategy.KnowledgeSources {
+		path := src.Path
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(l.directory, path)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		corpus.AddDocument(src.Name, filepath.Base(path), string(data))
+	}
+	if corpus.Len() > 0 {
+		runtime.Librarian = &Librarian{Knowledge: corpus}
+	}
 }
 
 // applyMemoryStrategy parses memory.md into a Strategy and wires the

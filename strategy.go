@@ -11,10 +11,10 @@ import (
 // port parses the sections whose effect is deterministic -- context-history
 // capacity, audit-trail retention, declared tools, the working ontology,
 // subagent-spawning limits and skills-discovery guidance -- and captures the
-// model-selection prose verbatim. The sections whose effect needs the LLM or
-// an unported plane (model binding, MCP, knowledge, sandbox, energy,
-// pricing, evolution, cross-session store) are recognised but left inert;
-// filling them is what the LLM/infra ports light up.
+// model-selection prose. It also parses pricing, budget, model selection and
+// knowledge sources (all wired). The sections whose effect needs an unported
+// plane (MCP, sandbox, energy, evolution, toolsets, auxiliary model,
+// cross-session store) are recognised but left inert.
 type Strategy struct {
 	Raw string
 
@@ -61,6 +61,10 @@ type Strategy struct {
 	// declared; the thresholds are fractions, sorted ascending.
 	Budget          float64
 	AlertThresholds []float64
+
+	// KnowledgeSources declared in memory.md's `## Knowledge` section (name:
+	// `path`); the loader reads and chunks them into a corpus.
+	KnowledgeSources []KnowledgeSource
 }
 
 // Dollars returns the declared cost of a token spend and whether pricing was
@@ -208,6 +212,8 @@ func StrategyFromMarkdown(text string) *Strategy {
 		case strings.Contains(heading, "pricing") || strings.Contains(heading, "price") ||
 			strings.Contains(heading, "cost"):
 			s.readPricing(prose)
+		case strings.Contains(heading, "knowledge"):
+			s.readKnowledge(body)
 		case strings.Contains(heading, "discover"):
 			s.SkillsDiscovery = prose
 		case strings.Contains(heading, "toolset"):
@@ -350,6 +356,22 @@ func (s *Strategy) readTools(body Body) {
 	if prose != "" && (disabledRe.MatchString(prose) ||
 		strings.Contains(prose, "fixed toolset") || strings.Contains(prose, "no new tools")) {
 		s.ToolAcquisition = false
+	}
+}
+
+// readKnowledge reads declared corpus sources: one `- name: `path“ bullet
+// per source, the path backticked in the bullet's text.
+func (s *Strategy) readKnowledge(body Body) {
+	for _, bullet := range body.Bullets {
+		name, description := splitDeclaration(bullet)
+		command, _, _ := extractReach(description)
+		path := command
+		if path == "" {
+			path = strings.TrimSpace(description)
+		}
+		if name != "" && path != "" {
+			s.KnowledgeSources = append(s.KnowledgeSources, KnowledgeSource{Name: name, Path: path})
+		}
 	}
 }
 

@@ -85,7 +85,7 @@ func TestJudgeErrorFailsClosed(t *testing.T) {
 // staticReasoner shows the Reasoner seam: swap deliberation wholesale.
 type staticReasoner struct{ decision string }
 
-func (s staticReasoner) Reason(context.Context, *Runtime, Intent, []*Workflow) (any, error) {
+func (s staticReasoner) Reason(context.Context, *Runtime, Intent, []*Workflow, *Research) (any, error) {
 	return s.decision, nil
 }
 

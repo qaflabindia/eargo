@@ -11,8 +11,8 @@ func TestDefaultPipelineOrder(t *testing.T) {
 	got := rt.PipelineNames()
 	want := []string{
 		"govern", "discover", "select", "compose", "schedule", "govern",
-		"delegate", "recall", "reason", "formalize", "evidence", "explain",
-		"audit", "memory",
+		"delegate", "recall", "research", "reason", "formalize", "evidence",
+		"explain", "audit", "memory",
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("pipeline = %v\nwant       %v", got, want)

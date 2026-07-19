@@ -221,12 +221,23 @@ func (recallStage) Run(c *Cycle) error {
 
 // -- reason -----------------------------------------------------------------
 
+type researchStage struct{}
+
+func (researchStage) Name() string { return "research" }
+
+func (researchStage) Run(c *Cycle) error {
+	if c.Runtime.Librarian != nil {
+		c.Research = c.Runtime.Librarian.Research(c.Ctx, c.Runtime, c.Intent)
+	}
+	return nil
+}
+
 type reasonStage struct{}
 
 func (reasonStage) Name() string { return "reason" }
 
 func (reasonStage) Run(c *Cycle) error {
-	decision, err := c.Runtime.Reasoner.Reason(c.Ctx, c.Runtime, c.Intent, c.Plan)
+	decision, err := c.Runtime.Reasoner.Reason(c.Ctx, c.Runtime, c.Intent, c.Plan, c.Research)
 	if err != nil {
 		return err
 	}
@@ -320,6 +331,9 @@ func (evidenceStage) Run(c *Cycle) error {
 	c.Evidence = c.Runtime.buildEvidence(c.Intent, c.Plan, c.Recalled)
 	if len(c.Data) > 0 {
 		c.Evidence.Sources["data"] = c.Data
+	}
+	if c.Research != nil && len(c.Research.Citations) > 0 {
+		c.Evidence.Sources["citations"] = c.Research.Citations
 	}
 	return nil
 }
