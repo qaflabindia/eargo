@@ -67,15 +67,26 @@ func (r LMReasoner) Reason(ctx context.Context, rt *Runtime, intent Intent, plan
 		}
 	}
 
-	out, err := ReasonAboutIntent.Run(ctx, r.LM, ReasonIn{
-		Intent:       intent.Text,
-		Context:      reasoningContext,
-		Capabilities: capabilities,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("reasoning against the model: %w", err)
+	var decision string
+	if rt.ToolBinder != nil && len(rt.ToolBinder.Tools()) > 0 {
+		// Native tool-use loop: the model calls tools to gather facts, then
+		// decides. Each call runs through the governed InvokeTool.
+		d, err := reasonWithTools(ctx, rt, r.LM, intent.Text, capabilities, reasoningContext, rt.ToolBinder.Tools())
+		if err != nil {
+			return nil, fmt.Errorf("reasoning against the model: %w", err)
+		}
+		decision = d
+	} else {
+		out, err := ReasonAboutIntent.Run(ctx, r.LM, ReasonIn{
+			Intent:       intent.Text,
+			Context:      reasoningContext,
+			Capabilities: capabilities,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("reasoning against the model: %w", err)
+		}
+		decision = out.Decision
 	}
-	decision := out.Decision
 	if rt.ReasoningLog != nil {
 		rt.ReasoningLog.Record(Record{
 			Stage:  "deliberation",

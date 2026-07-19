@@ -177,6 +177,33 @@ var ExplainDecision = Signature[ExplainIn, ExplainOut]{
 		"evidentiary basis for it.",
 }
 
+// -- tool use ---------------------------------------------------------------
+
+type ChooseToolIn struct {
+	Intent       string         `ear:"intent,The intent to resolve"`
+	Context      map[string]any `ear:"context,Structured context relevant to the intent"`
+	Capabilities string         `ear:"capabilities,The stacked personas and skill prompts for this intent"`
+	Tools        string         `ear:"tools,One 'name(parameters): description' line per available tool"`
+	Gathered     string         `ear:"gathered,Results of tool calls made so far, or 'none yet'"`
+}
+type ChooseToolOut struct {
+	Tool      string            `ear:"tool,The name of the one tool to call now, or empty to decide instead"`
+	Arguments map[string]string `ear:"arguments,The tool's arguments as '- name: value' bullets; empty when deciding instead"`
+	Decision  string            `ear:"decision,The final decision, given only when no tool is called"`
+}
+
+// ChooseToolAction: at each step of the tool loop, call one tool or decide.
+var ChooseToolAction = Signature[ChooseToolIn, ChooseToolOut]{
+	Instruction: "You are reasoning toward a decision and may use tools to get facts first. Read the tools and " +
+		"what you have gathered so far. If a tool would help, call exactly one -- name it and give its " +
+		"arguments. Otherwise, give the final decision. Never invent a tool that is not listed. When a call " +
+		"fails, do not simply fire the identical call again: diagnose the failure from the result you already " +
+		"have, change the input, and only then retry -- an unchanged failed call will be refused before it runs.",
+	// gathered is the one input that grows across the loop's otherwise-identical
+	// calls; rendering it last makes the rest a stable, cacheable prefix.
+	CacheBoundary: "gathered",
+}
+
 // -- memory / adaptation ----------------------------------------------------
 
 type SummarizeIn struct {
