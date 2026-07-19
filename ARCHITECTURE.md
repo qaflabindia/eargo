@@ -49,13 +49,20 @@ checking `ctx` at each gate and closing accounting + retention in a `defer`.
 Defaults are `DeterministicJudge` and `DefaultReasoner`; swap via functional
 options.
 
-### Layer 3 — The LLM subsystem (`judgment.go`, `signatures.go`, `lm.go`, `llm_client.go`, `seams.go`)
-EAR's dependency-free DSPy replacement, ported whole:
-- `judgment.go` — the engine. A `Judgment` (typed input/output `Field`s)
-  renders a markdown-section prompt and parses the reply into a typed
-  `Prediction` (`pred.Bool`, `.List`, `.Map`). Python's `SimpleNamespace`
-  becomes a `map[string]any` with typed getters.
-- `signatures.go` — 13 concrete Judgments (of ~30 in Python).
+### Layer 3 — The LLM subsystem (`signature.go`, `judgment.go`, `signatures.go`, `lm.go`, `llm_client.go`, `seams.go`)
+EAR's dependency-free DSPy replacement — redesigned around generics, not a
+transliteration of the Python dynamic API:
+- `signature.go` — **`Signature[In, Out]`**, a typed generic reasoning task.
+  In/Out are structs whose `ear:"name,description"`-tagged fields declare the
+  model's inputs and outputs; the field's **Go type drives parsing** (bool →
+  yes/no, `[]string` → list, `map[string]string` → blocks, string → prose).
+  `Run` returns a real typed `Out` — no `map[string]any`, no string keys, no
+  casts. Reflection over struct tags with per-type field caching, the same
+  pattern `encoding/json` uses.
+- `judgment.go` — the dynamic engine underneath (`Judgment` + `Prediction`),
+  kept for tasks whose fields are only known at runtime (contract extraction).
+  `Signature` is the typed façade; `Judgment` is the reflective core.
+- `signatures.go` — 13 concrete typed Signatures (of ~30 in Python).
 - `lm.go` / `llm_client.go` — the `LM` interface, a `ScriptedLM` test double,
   and `HTTPClient` (Anthropic Messages + OpenAI-compatible, retries,
   cache-prefix, usage via `CallHistory`).

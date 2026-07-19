@@ -8,9 +8,9 @@ import (
 )
 
 func TestJudgmentRenderPrompt(t *testing.T) {
-	prompt := JudgePolicyCompliance.RenderPrompt(map[string]any{
-		"policy_statement": "The loan must not exceed $75,000.",
-		"context":          map[string]any{"loan_amount": 90000.0},
+	prompt := JudgePolicyCompliance.Render(PolicyComplianceIn{
+		Statement: "The loan must not exceed $75,000.",
+		Context:   map[string]any{"loan_amount": 90000.0},
 	})
 	for _, want := range []string{
 		"## policy statement", "The loan must not exceed", "## context",
@@ -91,17 +91,18 @@ func TestJudgmentCacheBoundary(t *testing.T) {
 
 func TestSignatureOverScriptedLM(t *testing.T) {
 	lm := &ScriptedLM{Replies: []string{Reply("complies", "no", "rationale", "It exceeds the cap.")}}
-	pred, err := JudgePolicyCompliance.Run(context.Background(), lm, map[string]any{
-		"policy_statement": "cap it", "context": map[string]any{"loan_amount": 90000.0},
+	out, err := JudgePolicyCompliance.Run(context.Background(), lm, PolicyComplianceIn{
+		Statement: "cap it", Context: map[string]any{"loan_amount": 90000.0},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pred.Bool("complies") {
+	// out is a typed PolicyComplianceOut -- out.Complies is a bool, not a cast.
+	if out.Complies {
 		t.Error("expected complies=false")
 	}
-	if !strings.Contains(pred.Text("rationale"), "exceeds") {
-		t.Errorf("rationale = %q", pred.Text("rationale"))
+	if !strings.Contains(out.Rationale, "exceeds") {
+		t.Errorf("rationale = %q", out.Rationale)
 	}
 }
 

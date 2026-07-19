@@ -47,15 +47,15 @@ func (r LMReasoner) Reason(ctx context.Context, rt *Runtime, intent Intent, plan
 		}
 	}
 
-	pred, err := ReasonAboutIntent.Run(ctx, r.LM, map[string]any{
-		"intent":       intent.Text,
-		"context":      reasoningContext,
-		"capabilities": capabilities,
+	out, err := ReasonAboutIntent.Run(ctx, r.LM, ReasonIn{
+		Intent:       intent.Text,
+		Context:      reasoningContext,
+		Capabilities: capabilities,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("reasoning against the model: %w", err)
 	}
-	decision := pred.Text("decision")
+	decision := out.Decision
 	if rt.ReasoningLog != nil {
 		rt.ReasoningLog.Record(Record{
 			Stage:  "deliberation",
@@ -100,14 +100,14 @@ func (j LMJudge) Judge(ctx context.Context, policy *Policy, context map[string]a
 		}
 		return fallback.Judge(ctx, policy, context)
 	}
-	pred, err := JudgePolicyCompliance.Run(ctx, j.LM, map[string]any{
-		"policy_statement": policy.Statement,
-		"context":          context,
+	out, err := JudgePolicyCompliance.Run(ctx, j.LM, PolicyComplianceIn{
+		Statement: policy.Statement,
+		Context:   context,
 	})
 	if err != nil {
 		return false, "", fmt.Errorf("judging policy %q against the model: %w", policy.Name, err)
 	}
-	return pred.Bool("complies"), pred.Text("rationale"), nil
+	return out.Complies, out.Rationale, nil
 }
 
 // WithLM wires both seams -- deliberation and policy judging -- to reason
