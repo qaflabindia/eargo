@@ -6,6 +6,7 @@ import (
 	"iter"
 	"strings"
 	"sync"
+	"time"
 )
 
 // ReasoningLog is the audit trail of every reasoning step -- policy
@@ -25,27 +26,59 @@ type ReasoningLog struct {
 	enc     *json.Encoder
 }
 
-// Cycle is one reasoning cycle's ordered records.
+// Cycle is one reasoning cycle's ordered records, stamped with the moment it
+// opened so retention can rotate whole expired cycles out of the trail.
 type Cycle struct {
-	IntentText string   `json:"intent"`
-	Records    []Record `json:"records"`
+	IntentText string    `json:"intent"`
+	Started    time.Time `json:"started"`
+	Records    []Record  `json:"records"`
 }
 
 // Record is one logged reasoning step.
 type Record struct {
 	Stage     string         `json:"stage"`
+	Time      time.Time      `json:"time"`
 	Inputs    map[string]any `json:"inputs,omitempty"`
 	Output    string         `json:"output"`
 	Rationale string         `json:"rationale,omitempty"`
 	Model     string         `json:"model"`
 }
 
-// BeginCycle opens a new cycle keyed to the intent.
+// BeginCycle opens a new cycle keyed to the intent and stamped now.
 func (l *ReasoningLog) BeginCycle(intent Intent) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.Cycles = append(l.Cycles, Cycle{IntentText: intent.Text})
+	l.Cycles = append(l.Cycles, Cycle{IntentText: intent.Text, Started: time.Now()})
 	l.current = &l.Cycles[len(l.Cycles)-1]
+}
+
+// Rotate drops whole cycles whose start is older than retentionDays measured
+// from now, and returns how many were removed. Zero (or a non-positive
+// window) is a no-op, so retention only takes effect when memory.md declares
+// a "keep N days" window. The Python package rotates individual records by
+// timestamp; rotating at the cycle boundary keeps a cycle's trail intact.
+func (l *ReasoningLog) Rotate(retentionDays float64, now time.Time) int {
+	if retentionDays <= 0 {
+		return 0
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	cutoff := now.Add(-time.Duration(retentionDays * float64(24*time.Hour)))
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	kept := l.Cycles[:0:0]
+	removed := 0
+	for _, c := range l.Cycles {
+		if !c.Started.IsZero() && c.Started.Before(cutoff) {
+			removed++
+			continue
+		}
+		kept = append(kept, c)
+	}
+	l.Cycles = kept
+	l.current = nil
+	return removed
 }
 
 // Record appends one step to the current cycle (opening a headless cycle if
@@ -59,6 +92,9 @@ func (l *ReasoningLog) Record(r Record) {
 	}
 	if r.Model == "" {
 		r.Model = "deterministic-fallback"
+	}
+	if r.Time.IsZero() {
+		r.Time = time.Now()
 	}
 	l.current.Records = append(l.current.Records, r)
 	if l.Sink != nil {

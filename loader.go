@@ -169,7 +169,7 @@ func loadPolicies(doc Document) (map[string]*Policy, map[string]string, error) {
 			return nil, nil, err
 		}
 		key := Normalize(section.Name)
-		policies[key] = &Policy{
+		policy := &Policy{
 			Name:               section.Name,
 			Statement:          joinProse(body),
 			FallbackExpression: body.Field("fallback", "fallback expression"),
@@ -177,6 +177,16 @@ func loadPolicies(doc Document) (map[string]*Policy, map[string]string, error) {
 			Approvers:          splitReferences(body.Field("approvers", "approver")),
 			Escalation:         body.Field("escalate", "escalation"),
 		}
+		// A declared escalation must name a readable period; a deadline the
+		// runner silently can't read is a governance hole, not a default.
+		if policy.Escalation != "" {
+			days, ok := daysInProse(policy.Escalation)
+			if !ok {
+				return nil, nil, fmt.Errorf("policy '%s' declares Escalate '%s' but no readable period -- write 'Escalate: after 3 days'", section.Name, policy.Escalation)
+			}
+			policy.EscalationDays = &days
+		}
+		policies[key] = policy
 		scopes[key] = body.Field("applies to", "applies", "scope")
 	}
 	return policies, scopes, nil
@@ -227,6 +237,14 @@ func loadWorkflows(doc Document, personas map[string]*Persona, policies map[stri
 			Name:    section.Name,
 			Pattern: body.Field("pattern"),
 			Routes:  body.Field("routes", "route"),
+		}
+		// A declared retry budget must name a readable count.
+		if retries := body.Field("retries", "retry"); retries != "" {
+			count, ok := countInProse(retries)
+			if !ok {
+				return nil, nil, fmt.Errorf("workflow '%s' declares Retries '%s' but no readable count -- write 'Retries: retry a failed leg twice'", section.Name, retries)
+			}
+			workflow.RetryBudget = &count
 		}
 		var defaultPersona *Persona
 		if ref := body.Field("persona", "delegate to", "delegate"); ref != "" {
@@ -369,21 +387,21 @@ func applyPolicyScopes(runtime *Runtime, policies map[string]*Policy, scopes map
 	return nil
 }
 
-// applyMemoryStrategy reads the few deterministic settings the core needs
-// from memory.md: the context-history capacity. The richer strategy plane
-// (model binding, MCP, tools, knowledge) is out of scope for this port.
+// applyMemoryStrategy parses memory.md into a Strategy and wires the
+// settings whose effect is deterministic: the context-history capacity, the
+// declared tools, and the audit-trail retention window. The parsed Strategy
+// (ontology, subagent limits, skills-discovery guidance, model-selection
+// prose) is attached to the runtime for callers and for the LLM/infra ports
+// that will consume it.
 func applyMemoryStrategy(runtime *Runtime, memoryText string) {
 	if memoryText == "" {
 		return
 	}
-	doc := ParseDocument(memoryText)
-	for _, section := range doc.Sections {
-		if strings.Contains(Normalize(section.Name), "context history") {
-			body := section.StructuredBody()
-			if n := firstNumber(body.Prose); n > 0 {
-				runtime.Memory.Capacity = n
-			}
-		}
+	strategy := StrategyFromMarkdown(memoryText)
+	runtime.Strategy = strategy
+	runtime.Tools = strategy.Tools
+	if strategy.HistoryCapacity > 0 {
+		runtime.Memory.Capacity = strategy.HistoryCapacity
 	}
 }
 
@@ -463,21 +481,4 @@ func hasPolicy(policies []*Policy, want *Policy) bool {
 		}
 	}
 	return false
-}
-
-func firstNumber(s string) int {
-	n := 0
-	found := false
-	for _, ch := range s {
-		if ch >= '0' && ch <= '9' {
-			n = n*10 + int(ch-'0')
-			found = true
-		} else if found {
-			break
-		}
-	}
-	if !found {
-		return 0
-	}
-	return n
 }

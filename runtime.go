@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // PolicyViolationError is returned when a cycle is hard-blocked by one or
@@ -62,6 +63,14 @@ type Runtime struct {
 	// AdaptEvery throttles adaptation distillation to every Nth observed
 	// cycle. Zero disables it.
 	AdaptEvery int
+
+	// Strategy is the operating strategy parsed from memory.md (context
+	// history, audit retention, declared tools, ontology, subagent limits,
+	// skills-discovery guidance). Nil for a hand-built runtime never loaded
+	// from a directory. Tools are the strategy's declared tools, surfaced
+	// for convenience.
+	Strategy *Strategy
+	Tools    []Tool
 }
 
 // NewRuntime builds a Runtime with deterministic defaults for both seams and
@@ -117,11 +126,19 @@ func (r *Runtime) EnforcePolicies(ctx context.Context, context map[string]any) (
 // context aborts the cycle at the next checkpoint and returns ctx.Err(). A
 // hard policy block returns *PolicyViolationError; a parked approval gate
 // returns *ApprovalRequiredError.
-func (r *Runtime) Reason(ctx context.Context, intent Intent, approval *ApprovalVerdict) (any, error) {
+func (r *Runtime) Reason(ctx context.Context, intent Intent, approval *ApprovalVerdict) (decision any, err error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	started := time.Now()
 	r.ReasoningLog.BeginCycle(intent)
+	// Close the cycle's accounting on every exit -- completed, blocked or
+	// parked, a refusal costs whatever it cost -- then apply any declared
+	// retention window. Both run after the return value is settled.
+	defer func() {
+		r.recordUsage(started)
+		r.applyRetention()
+	}()
 
 	// Governance gate 1: runtime-wide policies.
 	violations, err := r.govern(ctx, r.Policies, intent, approval)
@@ -151,7 +168,7 @@ func (r *Runtime) Reason(ctx context.Context, intent Intent, approval *ApprovalV
 
 	recalled := r.recall()
 
-	decision, err := r.Reasoner.Reason(ctx, r, intent, scheduled)
+	decision, err = r.Reasoner.Reason(ctx, r, intent, scheduled)
 	if err != nil {
 		return nil, err
 	}
@@ -159,6 +176,11 @@ func (r *Runtime) Reason(ctx context.Context, intent Intent, approval *ApprovalV
 	if err != nil {
 		return nil, err
 	}
+
+	// Honour the plan's Contracts. With no model bound there is nothing
+	// honest to extract, so the skip itself goes on the record rather than
+	// fabricated values.
+	r.formalize(scheduled)
 
 	evidence := r.buildEvidence(intent, scheduled, recalled)
 	explanation := explain(evidence, decision)
@@ -180,6 +202,47 @@ func (r *Runtime) Reason(ctx context.Context, intent Intent, approval *ApprovalV
 		})
 	}
 	return decision, nil
+}
+
+// formalize honours each workflow Contract in the plan. This port binds no
+// model, so there is nothing honest to extract: it records the skip per
+// contract (the deterministic path the Python package takes with no model
+// bound) rather than fabricating deliverable values. The structural
+// conformance check (Contract.Judge) is available for a caller that fills
+// the fields itself.
+func (r *Runtime) formalize(plan []*Workflow) {
+	for _, w := range plan {
+		if w.Contract == nil {
+			continue
+		}
+		r.ReasoningLog.Record(Record{
+			Stage:  "contract",
+			Inputs: map[string]any{"contract": w.Contract.Name, "fields": w.Contract.RenderFields()},
+			Output: "skipped -- no model bound to extract the deliverable",
+		})
+	}
+}
+
+// recordUsage closes the cycle's accounting with its wall-clock latency.
+// Token, model-call and dollar accounting need a bound LM's call history and
+// so stay zero in this port; the record shape matches the Python package's
+// deterministic-fallback cycle.
+func (r *Runtime) recordUsage(started time.Time) {
+	latencyMs := time.Since(started).Milliseconds()
+	r.ReasoningLog.Record(Record{
+		Stage:  "usage",
+		Inputs: map[string]any{"model_calls": 0, "latency_ms": latencyMs},
+		Output: fmt.Sprintf("0 model calls (deterministic fallbacks), %d ms", latencyMs),
+	})
+}
+
+// applyRetention rotates the reasoning trail down to the declared retention
+// window (memory.md's "keep N days"), if the strategy set one. A no-op
+// otherwise.
+func (r *Runtime) applyRetention() {
+	if r.Strategy != nil && r.Strategy.RetentionDays > 0 {
+		r.ReasoningLog.Rotate(r.Strategy.RetentionDays, time.Time{})
+	}
 }
 
 // adapt distills a new Adaptation every AdaptEvery observed cycles.

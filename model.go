@@ -293,6 +293,26 @@ func (c *Contract) AddField(name, meaning string) *Contract {
 	return c
 }
 
+// Judge judges whether filled data honors the fields' meanings and returns
+// (conforms, rationale). With no model bound the check is structural only --
+// every declared field present with a non-empty value -- and the rationale
+// says so, matching the Python package's deterministic fallback. The
+// meaning-level judgment (does each value actually mean what the field
+// declares) requires a live model and is not performed here.
+func (c *Contract) Judge(data map[string]any) (bool, string) {
+	var missing []string
+	for _, f := range c.Fields {
+		v, ok := data[f.Name]
+		if !ok || v == nil || strings.TrimSpace(fmt.Sprint(v)) == "" {
+			missing = append(missing, f.Name)
+		}
+	}
+	if len(missing) > 0 {
+		return false, "structural check only (no model bound): missing or empty fields: " + strings.Join(missing, ", ")
+	}
+	return true, "structural check only (no model bound): every declared field is present and non-empty"
+}
+
 // RenderFields renders the contract's fields as declaration bullets.
 func (c *Contract) RenderFields() string {
 	lines := make([]string, len(c.Fields))

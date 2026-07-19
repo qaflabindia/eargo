@@ -67,10 +67,35 @@ behaviour you get when no provider is configured:
 | Order-preserving concurrent fan-out (`parallelMap`) | `concurrent.go` | ✅ |
 | Per-cycle pipeline steps (govern → … → adapt) | `pipeline.go` | ✅ |
 | Deterministic deliberation helpers | `reasoner.go` | ✅ |
-| Runtime cycle (`Reason(ctx,…)`, two governance gates, evidence, memory) | `runtime.go` | ✅ |
+| Runtime cycle (`Reason(ctx,…)`, two governance gates, evidence, memory, contract formalize, latency, retention) | `runtime.go` | ✅ |
+| Operating strategy from memory.md (history capacity, audit retention, tools, ontology, subagent limits, discovery guidance) | `strategy.go` | ✅ |
 | Functional options (`WithReasoner`, `WithPolicyJudge`, …) | `options.go` | ✅ |
-| Markdown stack loader (`LoadRuntime`, generic `resolve[T]`) | `loader.go` | ✅ |
+| Markdown stack loader (`LoadRuntime`, generic `resolve[T]`, escalation-days + retries parsing) | `loader.go` | ✅ |
 | CLI demo | `cmd/ear` | ✅ |
+
+### Deterministic behaviours completed from the "partially ported" gaps
+
+These were data-model-present/behaviour-missing and needed no LLM, so they
+are now done, matching the Python package's no-model path:
+
+- **Policy escalation** — `Escalate: after N days` is parsed into
+  `EscalationDays`; an unreadable period fails the load loudly.
+- **Workflow retries** — `Retries: … twice` is parsed into `RetryBudget`
+  (digit or spoken count); an unreadable count fails the load.
+- **Contract conformance** — `Contract.Judge` does the structural check
+  (every declared field present and non-empty), and the runtime records the
+  contract **skip** on the trail when no model is bound to extract it.
+- **Audit trail accounting** — every cycle records a `usage` step with
+  wall-clock latency (including blocked/parked cycles), and a declared
+  `keep N days` retention window rotates expired cycles off the trail.
+- **memory.md Strategy** — parsed and wired: context-history capacity, audit
+  retention, declared tools, working ontology, subagent limits, and
+  skills-discovery guidance.
+
+Still LLM-gated within those modules (need the `LM` client): natural-language
+policy judging, contract field *extraction* and meaning-level conformance,
+LLM reasoning + the tool-use loop, memory/adaptation LLM summarisation, and
+token/dollar usage accounting.
 
 **Not yet ported** (the LLM-facing and infrastructure surfaces): the
 dependency-free HTTPS `LM` client and signatures, the HTTP servers and
