@@ -60,6 +60,12 @@ type Runtime struct {
 	Reasoner    Reasoner
 	PolicyJudge PolicyJudge
 
+	// LM is the bound model, set by WithLM. It is read only for per-cycle
+	// usage accounting (the cycle's calls, tokens and latency); the seams
+	// above are what actually reason. Nil leaves usage on the deterministic
+	// path.
+	LM LM
+
 	// AdaptEvery throttles adaptation distillation to every Nth observed
 	// cycle. Zero disables it.
 	AdaptEvery int
@@ -131,12 +137,13 @@ func (r *Runtime) Reason(ctx context.Context, intent Intent, approval *ApprovalV
 		ctx = context.Background()
 	}
 	started := time.Now()
+	callsBefore := r.modelCallsSoFar()
 	r.ReasoningLog.BeginCycle(intent)
 	// Close the cycle's accounting on every exit -- completed, blocked or
 	// parked, a refusal costs whatever it cost -- then apply any declared
 	// retention window. Both run after the return value is settled.
 	defer func() {
-		r.recordUsage(started)
+		r.recordUsage(started, callsBefore)
 		r.applyRetention()
 	}()
 
@@ -223,16 +230,71 @@ func (r *Runtime) formalize(plan []*Workflow) {
 	}
 }
 
-// recordUsage closes the cycle's accounting with its wall-clock latency.
-// Token, model-call and dollar accounting need a bound LM's call history and
-// so stay zero in this port; the record shape matches the Python package's
-// deterministic-fallback cycle.
-func (r *Runtime) recordUsage(started time.Time) {
+// modelCallsSoFar is how many calls the bound LM's history holds before this
+// cycle, so the cycle's usage is the delta. Zero when no LM is bound or the
+// LM does not expose its history.
+func (r *Runtime) modelCallsSoFar() int {
+	if h, ok := r.LM.(CallHistory); ok {
+		return len(h.Calls())
+	}
+	return 0
+}
+
+// cycleCalls is the slice of LM calls made during this cycle -- the history
+// delta since callsBefore.
+func (r *Runtime) cycleCalls(callsBefore int) []Call {
+	h, ok := r.LM.(CallHistory)
+	if !ok {
+		return nil
+	}
+	calls := h.Calls()
+	if callsBefore > len(calls) {
+		return nil
+	}
+	return calls[callsBefore:]
+}
+
+// recordUsage closes the cycle's accounting: wall-clock latency always, and,
+// when an LM is bound, the model calls, tokens and retries this cycle
+// consumed, read from the LM's own call history. Written on blocked cycles
+// too -- a refusal costs whatever it cost.
+func (r *Runtime) recordUsage(started time.Time, callsBefore int) {
 	latencyMs := time.Since(started).Milliseconds()
+	calls := r.cycleCalls(callsBefore)
+	var in, out, cacheRead, cacheWrite, retries int
+	for _, c := range calls {
+		in += c.Usage.PromptTokens
+		out += c.Usage.CompletionTokens
+		cacheRead += c.Usage.CacheReadTokens
+		cacheWrite += c.Usage.CacheWriteTokens
+		retries += c.Retries
+	}
+	var output string
+	switch {
+	case len(calls) > 0:
+		output = fmt.Sprintf("%d model calls, %d+%d tokens", len(calls), in, out)
+		if cacheRead > 0 || cacheWrite > 0 {
+			output += fmt.Sprintf(" (%d cache read, %d cache write)", cacheRead, cacheWrite)
+		}
+		if retries > 0 {
+			output += fmt.Sprintf(", %d retried", retries)
+		}
+		output += fmt.Sprintf(", %d ms", latencyMs)
+	case r.LM != nil:
+		// A bound model with no new history means the calls were served from
+		// cache; the accounting says so rather than implying no model ran.
+		output = fmt.Sprintf("0 new model calls recorded (cached), %d ms", latencyMs)
+	default:
+		output = fmt.Sprintf("0 model calls (deterministic fallbacks), %d ms", latencyMs)
+	}
 	r.ReasoningLog.Record(Record{
-		Stage:  "usage",
-		Inputs: map[string]any{"model_calls": 0, "latency_ms": latencyMs},
-		Output: fmt.Sprintf("0 model calls (deterministic fallbacks), %d ms", latencyMs),
+		Stage: "usage",
+		Inputs: map[string]any{
+			"model_calls": len(calls), "input_tokens": in, "output_tokens": out,
+			"cache_read_tokens": cacheRead, "cache_write_tokens": cacheWrite,
+			"retries": retries, "latency_ms": latencyMs,
+		},
+		Output: output,
 	})
 }
 

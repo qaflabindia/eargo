@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -25,6 +26,23 @@ type HTTPClient struct {
 	Temperature *float64
 	MaxTokens   int
 	HTTP        *http.Client
+
+	mu      sync.Mutex
+	history []Call
+}
+
+// Calls returns a snapshot of this client's call history, so the Runtime can
+// account a cycle's model calls, tokens and latency from the delta.
+func (c *HTTPClient) Calls() []Call {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]Call{}, c.history...)
+}
+
+func (c *HTTPClient) record(call Call) {
+	c.mu.Lock()
+	c.history = append(c.history, call)
+	c.mu.Unlock()
 }
 
 const (
@@ -72,6 +90,7 @@ func (c *HTTPClient) Complete(ctx context.Context, prompt, system, cachePrefix s
 	if err != nil {
 		return "", err
 	}
+	started := time.Now()
 	var lastErr error
 	for attempt := 0; attempt <= len(retryBackoff); attempt++ {
 		if attempt > 0 {
@@ -82,8 +101,12 @@ func (c *HTTPClient) Complete(ctx context.Context, prompt, system, cachePrefix s
 			case <-time.After(wait):
 			}
 		}
-		text, retry, err := c.post(ctx, url, headers, payload, parse)
+		text, usage, retry, err := c.post(ctx, url, headers, payload, parse)
 		if err == nil {
+			c.record(Call{
+				Prompt: prompt, System: system, CachePrefix: cachePrefix, Reply: text,
+				Usage: usage, LatencyMs: time.Since(started).Milliseconds(), Retries: attempt,
+			})
 			return text, nil
 		}
 		lastErr = err
@@ -94,39 +117,40 @@ func (c *HTTPClient) Complete(ctx context.Context, prompt, system, cachePrefix s
 	return "", fmt.Errorf("LM call failed after retries: %w", lastErr)
 }
 
-func (c *HTTPClient) post(ctx context.Context, url string, headers map[string]string, payload []byte, parse func(map[string]any) string) (string, bool, error) {
+func (c *HTTPClient) post(ctx context.Context, url string, headers map[string]string, payload []byte, parse func(map[string]any) (string, Usage)) (string, Usage, bool, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
-		return "", false, err
+		return "", Usage{}, false, err
 	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return "", true, err // transport failure: retryable
+		return "", Usage{}, true, err // transport failure: retryable
 	}
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
 		retry := resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500
-		return "", retry, fmt.Errorf("LM provider returned %d: %s", resp.StatusCode, strings.TrimSpace(string(data)))
+		return "", Usage{}, retry, fmt.Errorf("LM provider returned %d: %s", resp.StatusCode, strings.TrimSpace(string(data)))
 	}
 	var decoded map[string]any
 	if err := json.Unmarshal(data, &decoded); err != nil {
-		return "", false, fmt.Errorf("LM response was not JSON: %w", err)
+		return "", Usage{}, false, fmt.Errorf("LM response was not JSON: %w", err)
 	}
-	return parse(decoded), false, nil
+	text, usage := parse(decoded)
+	return text, usage, false, nil
 }
 
-func (c *HTTPClient) request(prompt, system, cachePrefix string) (string, map[string]string, map[string]any, func(map[string]any) string) {
+func (c *HTTPClient) request(prompt, system, cachePrefix string) (string, map[string]string, map[string]any, func(map[string]any) (string, Usage)) {
 	if c.Provider == "anthropic" {
 		return c.anthropic(prompt, system, cachePrefix)
 	}
 	return c.openai(prompt, system)
 }
 
-func (c *HTTPClient) anthropic(prompt, system, cachePrefix string) (string, map[string]string, map[string]any, func(map[string]any) string) {
+func (c *HTTPClient) anthropic(prompt, system, cachePrefix string) (string, map[string]string, map[string]any, func(map[string]any) (string, Usage)) {
 	base := c.APIBase
 	if base == "" {
 		base = "https://api.anthropic.com"
@@ -154,7 +178,7 @@ func (c *HTTPClient) anthropic(prompt, system, cachePrefix string) (string, map[
 	if c.Temperature != nil {
 		body["temperature"] = *c.Temperature
 	}
-	parse := func(data map[string]any) string {
+	parse := func(data map[string]any) (string, Usage) {
 		var sb strings.Builder
 		if blocks, ok := data["content"].([]any); ok {
 			for _, b := range blocks {
@@ -165,12 +189,18 @@ func (c *HTTPClient) anthropic(prompt, system, cachePrefix string) (string, map[
 				}
 			}
 		}
-		return sb.String()
+		u, _ := data["usage"].(map[string]any)
+		return sb.String(), Usage{
+			PromptTokens:     jsonInt(u["input_tokens"]),
+			CompletionTokens: jsonInt(u["output_tokens"]),
+			CacheReadTokens:  jsonInt(u["cache_read_input_tokens"]),
+			CacheWriteTokens: jsonInt(u["cache_creation_input_tokens"]),
+		}
 	}
 	return base + "/v1/messages", headers, body, parse
 }
 
-func (c *HTTPClient) openai(prompt, system string) (string, map[string]string, map[string]any, func(map[string]any) string) {
+func (c *HTTPClient) openai(prompt, system string) (string, map[string]string, map[string]any, func(map[string]any) (string, Usage)) {
 	base := c.APIBase
 	if base == "" {
 		base = "https://api.openai.com/v1"
@@ -191,15 +221,33 @@ func (c *HTTPClient) openai(prompt, system string) (string, map[string]string, m
 	if c.MaxTokens > 0 {
 		body["max_tokens"] = c.MaxTokens
 	}
-	parse := func(data map[string]any) string {
+	parse := func(data map[string]any) (string, Usage) {
 		choices, ok := data["choices"].([]any)
 		if !ok || len(choices) == 0 {
-			return ""
+			return "", Usage{}
 		}
 		choice, _ := choices[0].(map[string]any)
 		message, _ := choice["message"].(map[string]any)
 		text, _ := message["content"].(string)
-		return text
+		u, _ := data["usage"].(map[string]any)
+		details, _ := u["prompt_tokens_details"].(map[string]any)
+		return text, Usage{
+			PromptTokens:     jsonInt(u["prompt_tokens"]),
+			CompletionTokens: jsonInt(u["completion_tokens"]),
+			CacheReadTokens:  jsonInt(details["cached_tokens"]),
+		}
 	}
 	return base + "/chat/completions", headers, body, parse
+}
+
+// jsonInt reads an integer from a decoded-JSON value (numbers arrive as
+// float64), returning 0 for a missing or non-numeric value.
+func jsonInt(v any) int {
+	switch n := v.(type) {
+	case float64:
+		return int(n)
+	case int:
+		return n
+	}
+	return 0
 }

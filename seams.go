@@ -117,5 +117,6 @@ func WithLM(lm LM) Option {
 	return func(r *Runtime) {
 		r.Reasoner = NewLMReasoner(lm)
 		r.PolicyJudge = NewLMJudge(lm)
+		r.LM = lm
 	}
 }

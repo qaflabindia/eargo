@@ -87,15 +87,19 @@ are now done, matching the Python package's no-model path:
   contract **skip** on the trail when no model is bound to extract it.
 - **Audit trail accounting** — every cycle records a `usage` step with
   wall-clock latency (including blocked/parked cycles), and a declared
-  `keep N days` retention window rotates expired cycles off the trail.
+  `keep N days` retention window rotates expired cycles off the trail. When
+  an `LM` is bound (via `WithLM`), the `usage` step reports the cycle's real
+  model calls, prompt/completion tokens, cache tokens and retries, read from
+  the LM's own call history (the `CallHistory` seam).
 - **memory.md Strategy** — parsed and wired: context-history capacity, audit
   retention, declared tools, working ontology, subagent limits, and
   skills-discovery guidance.
 
-Still LLM-gated within those modules (need the `LM` client): natural-language
-policy judging, contract field *extraction* and meaning-level conformance,
-LLM reasoning + the tool-use loop, memory/adaptation LLM summarisation, and
-token/dollar usage accounting.
+Still LLM-gated within those modules (need a live model): contract field
+*extraction* and meaning-level conformance, the tool-use loop, and
+memory/adaptation LLM summarisation. Dollar costing (tokens × declared
+pricing) is the small remaining accounting step on top of the now-wired
+token usage.
 
 ### The DSPy layer — native structured prompting (now ported)
 
