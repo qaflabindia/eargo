@@ -66,6 +66,12 @@ type Runtime struct {
 	// path.
 	LM LM
 
+	// AuxLM is the auxiliary model, set by WithAuxiliaryLM or memory.md's
+	// `## Auxiliary Model`. It backs the mechanical seams (memory compression,
+	// adaptation distillation) instead of the primary LM. Nil leaves those on
+	// the primary model, or the deterministic digest when no model is bound.
+	AuxLM LM
+
 	// AdaptEvery throttles adaptation distillation to every Nth observed
 	// cycle. Zero disables it.
 	AdaptEvery int

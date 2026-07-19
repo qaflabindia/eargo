@@ -153,6 +153,16 @@ func WithLM(lm LM) Option {
 	return func(r *Runtime) { attachLM(r, lm) }
 }
 
+// WithAuxiliaryLM binds a second, usually cheaper model to the runtime's
+// mechanical (non-judgment) work -- memory compression and adaptation
+// distillation -- leaving deliberation and policy judging on the primary
+// model. The authored path is a `## Auxiliary Model` section in memory.md;
+// this is the programmatic escape hatch. Apply after WithLM so it wins those
+// two seams.
+func WithAuxiliaryLM(lm LM) Option {
+	return func(r *Runtime) { attachAuxiliaryLM(r, lm) }
+}
+
 // attachLM binds a model across every seam that uses one -- deliberation,
 // policy judging, memory compression and adaptation distillation -- so the
 // programmatic WithLM option and the memory.md-authored model selection wire
@@ -163,6 +173,23 @@ func attachLM(r *Runtime, lm LM) {
 	r.Reasoner = NewLMReasoner(lm)
 	r.PolicyJudge = NewLMJudge(lm)
 	r.LM = lm
+	r.Memory.Summarizer = func(history string) (string, error) {
+		out, err := SummarizeHistory.Run(context.Background(), lm, SummarizeIn{History: history})
+		return out.Summary, err
+	}
+	r.Adaptations.Distiller = func(summary string) (string, error) {
+		out, err := DistillInsight.Run(context.Background(), lm, DistillIn{ExperienceSummary: summary})
+		return out.Insight, err
+	}
+}
+
+// attachAuxiliaryLM rebinds only the two mechanical seams -- memory
+// compression and adaptation distillation -- to a second model, overriding the
+// primary that attachLM set there while leaving deliberation and policy
+// judging untouched. These are rare, off the cancellable cycle path, and fall
+// back to their deterministic paths on error, so a background context is fine.
+func attachAuxiliaryLM(r *Runtime, lm LM) {
+	r.AuxLM = lm
 	r.Memory.Summarizer = func(history string) (string, error) {
 		out, err := SummarizeHistory.Run(context.Background(), lm, SummarizeIn{History: history})
 		return out.Summary, err

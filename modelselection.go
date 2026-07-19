@@ -36,27 +36,39 @@ func isProvider(name string) bool {
 	return false
 }
 
-// readModel parses the model-selection prose into the Strategy's fields. It
-// never reads or stores a credential -- only the env var name that holds one.
-func (s *Strategy) readModel(prose string) {
-	s.ModelSelection = prose
+// modelSpec is one parsed model selection: provider, "provider/model" id, the
+// named credential env var, an optional local api_base, and the sampling
+// params. Shared by the primary and auxiliary selections so both read prose by
+// exactly the same rule.
+type modelSpec struct {
+	Provider        string
+	Model           string
+	APIKeyEnvVar    string
+	APIBase         string
+	Temperature     *float64
+	MaxOutputTokens int
+}
 
+// parseModelProse reads a model selection from plain English. It never reads
+// or stores a credential -- only the env var name that holds one.
+func parseModelProse(prose string) modelSpec {
+	var spec modelSpec
 	if u := urlRe.FindString(prose); u != "" {
-		s.APIBase = strings.TrimRight(u, ".,;")
+		spec.APIBase = strings.TrimRight(u, ".,;")
 	}
 	if m := envVarRe.FindStringSubmatch(prose); m != nil {
-		s.APIKeyEnvVar = m[1]
+		spec.APIKeyEnvVar = m[1]
 	}
 	if m := temperatureRe.FindStringSubmatch(prose); m != nil {
 		if v, err := strconv.ParseFloat(m[1], 64); err == nil {
-			s.Temperature = &v
+			spec.Temperature = &v
 		}
 	}
 	if m := maxTokensRe.FindStringSubmatch(prose); m != nil {
 		for _, g := range m[1:] {
 			if g != "" {
 				if v, err := strconv.Atoi(strings.ReplaceAll(g, ",", "")); err == nil {
-					s.MaxOutputTokens = v
+					spec.MaxOutputTokens = v
 				}
 				break
 			}
@@ -71,8 +83,8 @@ func (s *Strategy) readModel(prose string) {
 	for _, m := range modelIDRe.FindAllStringSubmatch(cleaned, -1) {
 		left, right := strings.ToLower(m[1]), strings.TrimRight(m[2], ".")
 		if isProvider(left) || hasDigit(right) {
-			s.Provider, s.Model = left, left+"/"+right
-			return
+			spec.Provider, spec.Model = left, left+"/"+right
+			return spec
 		}
 	}
 	// Fallback: a named provider plus a model-like token carrying a digit.
@@ -83,11 +95,58 @@ func (s *Strategy) readModel(prose string) {
 		}
 		for _, tok := range modelTokenRe.FindAllString(lowered, -1) {
 			if tok != prov && hasDigit(tok) {
-				s.Provider, s.Model = prov, prov+"/"+tok
-				return
+				spec.Provider, spec.Model = prov, prov+"/"+tok
+				return spec
 			}
 		}
 	}
+	return spec
+}
+
+// clientFrom builds an HTTP LM client from a parsed spec, or (nil, false) when
+// no model was named or -- the graceful-degradation case -- the named
+// credential is absent and no local api_base is set. The key is read from the
+// environment here; it is never logged.
+func clientFrom(spec modelSpec) (*HTTPClient, bool) {
+	if spec.Model == "" {
+		return nil, false
+	}
+	client := NewHTTPClient(spec.Provider, spec.Model, spec.APIKeyEnvVar, spec.APIBase)
+	if client.APIKey == "" && spec.APIBase == "" {
+		return nil, false
+	}
+	client.Temperature = spec.Temperature
+	if spec.MaxOutputTokens > 0 {
+		client.MaxTokens = spec.MaxOutputTokens
+	}
+	return client, true
+}
+
+// readModel parses the primary model selection into the Strategy's fields.
+func (s *Strategy) readModel(prose string) {
+	s.ModelSelection = prose
+	spec := parseModelProse(prose)
+	s.Provider = spec.Provider
+	s.Model = spec.Model
+	s.APIKeyEnvVar = spec.APIKeyEnvVar
+	s.APIBase = spec.APIBase
+	s.Temperature = spec.Temperature
+	s.MaxOutputTokens = spec.MaxOutputTokens
+}
+
+// readAuxiliaryModel parses the `## Auxiliary Model` selection -- a second,
+// usually cheaper model for mechanical work (memory compression, adaptation
+// distillation), not judgment -- into its own fields, by the same rule, so the
+// two never collide.
+func (s *Strategy) readAuxiliaryModel(prose string) {
+	s.AuxModelSelection = prose
+	spec := parseModelProse(prose)
+	s.AuxProvider = spec.Provider
+	s.AuxModel = spec.Model
+	s.AuxAPIKeyEnvVar = spec.APIKeyEnvVar
+	s.AuxAPIBase = spec.APIBase
+	s.AuxTemperature = spec.Temperature
+	s.AuxMaxOutputTokens = spec.MaxOutputTokens
 }
 
 // ModelClient builds the HTTP LM client this strategy declares, or (nil,
@@ -96,18 +155,21 @@ func (s *Strategy) readModel(prose string) {
 // set, so the runtime stays on its deterministic fallback rather than
 // crashing. The key is read from the environment here; it is never logged.
 func (s *Strategy) ModelClient() (*HTTPClient, bool) {
-	if s.Model == "" {
-		return nil, false
-	}
-	client := NewHTTPClient(s.Provider, s.Model, s.APIKeyEnvVar, s.APIBase)
-	if client.APIKey == "" && s.APIBase == "" {
-		return nil, false
-	}
-	client.Temperature = s.Temperature
-	if s.MaxOutputTokens > 0 {
-		client.MaxTokens = s.MaxOutputTokens
-	}
-	return client, true
+	return clientFrom(modelSpec{
+		Provider: s.Provider, Model: s.Model, APIKeyEnvVar: s.APIKeyEnvVar,
+		APIBase: s.APIBase, Temperature: s.Temperature, MaxOutputTokens: s.MaxOutputTokens,
+	})
+}
+
+// AuxModelClient builds the auxiliary (mechanical-work) LM client this
+// strategy declares, by the same rule and with the same graceful degradation
+// as ModelClient. Nil/false when no auxiliary model is authored or its
+// credential is absent.
+func (s *Strategy) AuxModelClient() (*HTTPClient, bool) {
+	return clientFrom(modelSpec{
+		Provider: s.AuxProvider, Model: s.AuxModel, APIKeyEnvVar: s.AuxAPIKeyEnvVar,
+		APIBase: s.AuxAPIBase, Temperature: s.AuxTemperature, MaxOutputTokens: s.AuxMaxOutputTokens,
+	})
 }
 
 func hasDigit(s string) bool {

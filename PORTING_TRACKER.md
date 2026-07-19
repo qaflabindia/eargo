@@ -84,7 +84,7 @@ binding a model lights up the ported signatures with no pipeline change.
 
 ## 4. Strategy / loader
 
-- 🟡 `strategy` — history capacity, audit retention, tools, ontology, discovery guidance ✅; **model binding wired** (`## Model Selection` auto-binds at load, key from env); **cross-session store wired** (`## Cross-Session Data` path parsed, restore-before/save-after); **subagent spawning wired** (`## Subagent Spawning` enable/limit → `Spawner`); MCP / sandbox / energy / evolution / toolsets / auxiliary model ⬜ (recognised, inert)
+- 🟡 `strategy` — history capacity, audit retention, tools, ontology, discovery guidance ✅; **model binding wired** (`## Model Selection` auto-binds at load, key from env); **auxiliary model wired** (`## Auxiliary Model` backs memory compression + adaptation distillation, same parse rule, own fields/env var); **cross-session store wired** (`## Cross-Session Data` path parsed, restore-before/save-after); **subagent spawning wired** (`## Subagent Spawning` enable/limit → `Spawner`); MCP / sandbox / energy / evolution / toolsets ⬜ (recognised, inert — deployment-only for a library target)
 - ✅ `ontology` — as part of Strategy
 - ✅ `loader` — skills/personas/policies/workflows/contracts/processes/tenant/scopes + escalation + retries + strategy wiring
 

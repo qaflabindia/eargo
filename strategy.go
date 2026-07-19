@@ -11,11 +11,11 @@ import (
 // port parses the sections whose effect is deterministic -- context-history
 // capacity, audit-trail retention, declared tools, the working ontology,
 // subagent-spawning limits and skills-discovery guidance -- and captures the
-// model-selection prose. It also parses pricing, budget, model selection,
-// knowledge sources, the cross-session store path and subagent-spawning
-// limits (all wired). The sections whose effect needs an unported plane (MCP,
-// sandbox, energy, evolution, toolsets, auxiliary model) are recognised but
-// left inert.
+// model-selection prose. It also parses pricing, budget, primary and
+// auxiliary model selection, knowledge sources, the cross-session store path
+// and subagent-spawning limits (all wired). The sections whose effect needs an
+// unported plane (MCP, sandbox, energy, evolution, toolsets) are recognised
+// but left inert.
 type Strategy struct {
 	Raw string
 
@@ -51,6 +51,18 @@ type Strategy struct {
 	APIBase         string
 	Temperature     *float64
 	MaxOutputTokens int
+
+	// Auxiliary model selection, authored in memory.md's `## Auxiliary Model`
+	// section: a second, usually cheaper model for mechanical work (memory
+	// compression, adaptation distillation) rather than judgment. Read by the
+	// same rule as the primary, into its own fields so the two never collide.
+	AuxModelSelection  string
+	AuxProvider        string
+	AuxModel           string
+	AuxAPIKeyEnvVar    string
+	AuxAPIBase         string
+	AuxTemperature     *float64
+	AuxMaxOutputTokens int
 
 	Pricing              string
 	InputRatePerMillion  *float64 // nil = undeclared
@@ -231,7 +243,7 @@ func StrategyFromMarkdown(text string) *Strategy {
 		case strings.Contains(heading, "tool"):
 			s.readTools(body)
 		case strings.Contains(heading, "auxiliary") || strings.Contains(heading, "summar"):
-			// recognised; auxiliary model needs the LM
+			s.readAuxiliaryModel(prose)
 		case strings.Contains(heading, "model"):
 			s.readModel(prose)
 		case strings.Contains(heading, "spawn") || strings.Contains(heading, "subagent") ||

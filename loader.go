@@ -464,6 +464,14 @@ func applyMemoryStrategy(runtime *Runtime, memoryText string) {
 	if client, ok := strategy.ModelClient(); ok {
 		attachLM(runtime, client)
 	}
+	// A `## Auxiliary Model` section binds a second, usually cheaper model to
+	// the mechanical seams (memory compression, adaptation distillation),
+	// overriding the primary there. Wired after the primary so it wins those
+	// two seams; absent or credential-less, the primary (or deterministic
+	// digest) stands.
+	if aux, ok := strategy.AuxModelClient(); ok {
+		attachAuxiliaryLM(runtime, aux)
+	}
 	// A `## Subagent Spawning` section wires the Spawner with the authored
 	// enable/limit -- so an author's "up to 3 subagents" (or "no subagents")
 	// is enforced when the runtime spawns. Left nil when unconfigured, keeping
