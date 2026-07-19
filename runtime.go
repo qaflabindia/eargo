@@ -81,6 +81,10 @@ type Runtime struct {
 	// Pipeline is the ordered list of stages Reason runs. It defaults to
 	// defaultPipeline(); replace or reorder it to customize the cycle.
 	Pipeline []Stage
+
+	// Budget, when set (via WithBudget), tracks cumulative dollar spend and
+	// fires progressive threshold alerts. It never blocks the cycle.
+	Budget *BudgetMonitor
 }
 
 // NewRuntime builds a Runtime with deterministic defaults for both seams and
@@ -224,12 +228,22 @@ func (r *Runtime) recordUsage(started time.Time, callsBefore int) {
 		cacheWrite += c.Usage.CacheWriteTokens
 		retries += c.Retries
 	}
+	// Dollar cost only when the stack declared Pricing in memory.md -- a
+	// figure nobody declared is never invented.
+	cost, priced := 0.0, false
+	if r.Strategy != nil {
+		cost, priced = r.Strategy.Dollars(in, out, cacheRead, cacheWrite)
+	}
+
 	var output string
 	switch {
 	case len(calls) > 0:
 		output = fmt.Sprintf("%d model calls, %d+%d tokens", len(calls), in, out)
 		if cacheRead > 0 || cacheWrite > 0 {
 			output += fmt.Sprintf(" (%d cache read, %d cache write)", cacheRead, cacheWrite)
+		}
+		if priced {
+			output += fmt.Sprintf(", ~$%.6f", cost)
 		}
 		if retries > 0 {
 			output += fmt.Sprintf(", %d retried", retries)
@@ -242,15 +256,21 @@ func (r *Runtime) recordUsage(started time.Time, callsBefore int) {
 	default:
 		output = fmt.Sprintf("0 model calls (deterministic fallbacks), %d ms", latencyMs)
 	}
-	r.ReasoningLog.Record(Record{
-		Stage: "usage",
-		Inputs: map[string]any{
-			"model_calls": len(calls), "input_tokens": in, "output_tokens": out,
-			"cache_read_tokens": cacheRead, "cache_write_tokens": cacheWrite,
-			"retries": retries, "latency_ms": latencyMs,
-		},
-		Output: output,
-	})
+	inputs := map[string]any{
+		"model_calls": len(calls), "input_tokens": in, "output_tokens": out,
+		"cache_read_tokens": cacheRead, "cache_write_tokens": cacheWrite,
+		"retries": retries, "latency_ms": latencyMs,
+	}
+	if priced {
+		inputs["cost"] = cost
+	}
+	r.ReasoningLog.Record(Record{Stage: "usage", Inputs: inputs, Output: output})
+
+	// Feed the budget monitor after the usage record, so any threshold alert
+	// reads on the trail right after the spend that triggered it. Non-blocking.
+	if r.Budget != nil && priced && cost > 0 {
+		r.Budget.Add(cost)
+	}
 }
 
 // applyRetention rotates the reasoning trail down to the declared retention

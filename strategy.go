@@ -38,6 +38,32 @@ type Strategy struct {
 	Ontology Ontology
 
 	ModelSelection string // raw prose; no binding is built (no LM in this port)
+
+	Pricing              string
+	InputRatePerMillion  *float64 // nil = undeclared
+	OutputRatePerMillion *float64
+}
+
+// Dollars returns the declared cost of a token spend and whether pricing was
+// authored at all. A figure nobody declared is never invented (the bool is
+// false). Cached input is priced off the input rate at the provider-standard
+// multipliers (cache read ~0.1x, cache write ~1.25x); input is the uncached
+// remainder, so the three input counts never double-bill.
+func (s *Strategy) Dollars(input, output, cacheRead, cacheWrite int) (float64, bool) {
+	if s.InputRatePerMillion == nil && s.OutputRatePerMillion == nil {
+		return 0, false
+	}
+	cost := 0.0
+	if s.InputRatePerMillion != nil {
+		rate := *s.InputRatePerMillion / 1_000_000
+		cost += float64(input) * rate
+		cost += float64(cacheRead) * rate * 0.1
+		cost += float64(cacheWrite) * rate * 1.25
+	}
+	if s.OutputRatePerMillion != nil {
+		cost += float64(output) * *s.OutputRatePerMillion / 1_000_000
+	}
+	return cost, true
 }
 
 // Ontology is the working vocabulary the runtime reasons with.
@@ -158,6 +184,9 @@ func StrategyFromMarkdown(text string) *Strategy {
 			s.readOntology(body)
 		case strings.Contains(heading, "audit"):
 			s.readAudit(prose)
+		case strings.Contains(heading, "pricing") || strings.Contains(heading, "price") ||
+			strings.Contains(heading, "cost"):
+			s.readPricing(prose)
 		case strings.Contains(heading, "discover"):
 			s.SkillsDiscovery = prose
 		case strings.Contains(heading, "toolset"):
@@ -200,6 +229,51 @@ func (s *Strategy) readAudit(prose string) {
 				s.RetentionDays = days
 				break
 			}
+		}
+	}
+}
+
+// readPricing reads token rates from prose. The reliable form is per
+// million: "Input tokens cost $3 per million; output tokens cost $15 per
+// million." Each sentence names input or output, a $ amount, and the scale
+// word (million / thousand / token).
+func (s *Strategy) readPricing(prose string) {
+	s.Pricing = prose
+	for _, sentence := range strings.FieldsFunc(prose, func(r rune) bool { return r == '.' || r == ';' }) {
+		words := strings.Fields(strings.ToLower(sentence))
+		rate, found := 0.0, false
+		for _, w := range words {
+			if strings.HasPrefix(w, "$") {
+				if v, err := strconv.ParseFloat(strings.Trim(w, "$,()"), 64); err == nil {
+					rate, found = v, true
+					break
+				}
+			}
+		}
+		if !found {
+			continue
+		}
+		has := func(word string) bool {
+			for _, w := range words {
+				if w == word {
+					return true
+				}
+			}
+			return false
+		}
+		switch {
+		case has("thousand") || has("1k"):
+			rate *= 1000
+		case has("token") && !has("million") && !has("1m"):
+			rate *= 1_000_000
+		}
+		if has("input") {
+			v := rate
+			s.InputRatePerMillion = &v
+		}
+		if has("output") {
+			v := rate
+			s.OutputRatePerMillion = &v
 		}
 	}
 }

@@ -21,7 +21,7 @@ modules, ~21.5k lines). Update the marks as work lands.
 | Pipeline stages | 13 | 1 | 0 | 0 | 1 |
 | DSPy layer (engine/LM) | 3 | 2 | 1 | 1 | 0 |
 | Strategy / loader | 2 | 1 | 0 | 0 | 0 |
-| Go-idiom enhancements | 6 | 0 | 0 | 0 | 0 |
+| Go-idiom enhancements | 7 | 0 | 0 | 0 | 0 |
 | Category B (infra/AGI planes) | 1 | 0 | 0 | 1 | ~40 |
 
 ---
@@ -45,7 +45,7 @@ modules, ~21.5k lines). Update the marks as work lands.
 - ✅ `experience` — Experience aggregation
 - ✅ `adaptation` — deterministic most-common ✅; **LLM distill wired** via `AdaptationBank.Distiller` (`DistillInsight`, most-common fallback)
 - ✅ `adapter` — as `Runtime.adapt` + `AdaptEvery`
-- 🟡 `reasoning_log` — records + JSONL sink + iterator + retention + **token accounting** ✅; **usage-report markdown + dollar costing ⬜**
+- 🟡 `reasoning_log` — records + JSONL sink + iterator + retention + token accounting + **dollar costing** ✅; **usage-report markdown ⬜** (+ hash-chain/verify ⬜)
 
 ## 2. Pipeline stages
 
@@ -84,7 +84,7 @@ binding a model lights up the ported signatures with no pipeline change.
 
 ## 4. Strategy / loader
 
-- 🟡 `strategy` — history capacity, audit retention, tools, ontology, subagent limits, discovery guidance ✅; **model binding / MCP / knowledge / sandbox / energy / pricing / evolution / toolsets / auxiliary model / cross-session ⬜ (recognised, inert)**
+- 🟡 `strategy` — history capacity, audit retention, tools, ontology, subagent limits, discovery guidance ✅; **model binding / MCP / knowledge / sandbox / energy / evolution / toolsets / auxiliary model / cross-session ⬜ (recognised, inert)**
 - ✅ `ontology` — as part of Strategy
 - ✅ `loader` — skills/personas/policies/workflows/contracts/processes/tenant/scopes + escalation + retries + strategy wiring
 
@@ -96,10 +96,11 @@ binding a model lights up the ported signatures with no pipeline change.
 - ✅ Generics (`resolve[T]`)
 - ✅ JSONL sink + range-over-func record iterator
 - ✅ ScriptedLM deterministic test double (LLM path runs in CI, no network)
+- ✅ **Budget alerts** (net-new, not in Python) — non-blocking progressive dollar-threshold alerts (`BudgetMonitor`, `WithBudget`)
 
 ## 6. Category B — whole modules not started
 
-**Accounting/reporting:** ⬜ dollar costing (tokens × pricing) · ⬜ usage report
+**Accounting/reporting:** ✅ dollar costing (tokens × pricing) · ⬜ usage report ledger
 
 **Servers / UI / observability:** ⬜ `server` ⬜ `dashboard` ⬜ `monitor` ⬜ `web` ⬜ `mail`
 
@@ -116,7 +117,7 @@ binding a model lights up the ported signatures with no pipeline change.
 1. ~~One `Stage` seam~~ ✅ **done** — the composable pipeline wires 9 of 13 signatures.
 2. ~~Contract extraction~~ ✅ **done** — extract + `JudgeContractConformance` + hinted retry wired into the formalize stage; conformant data reaches the decision's evidence.
 3. ~~LLM memory/adaptation~~ ✅ **done** — `SummarizeHistory` + `DistillInsight` wired with digest/most-common fallbacks.
-4. **Dollar costing** — parse `## Pricing`, multiply the now-tracked tokens.
+4. ~~Dollar costing~~ ✅ **done** — `## Pricing` parsed, `Strategy.Dollars`, `~$X` on the usage record; plus a non-blocking `BudgetMonitor`.
 5. **Tooling** — `tool_binder` + the reasoner tool-use loop.
 6. Then category-B planes as needed (knowledge/librarian, session_store, MCP, server).
 
