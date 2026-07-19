@@ -101,6 +101,11 @@ type Runtime struct {
 	// next session resumes warm. A save failure is recorded, never fatal --
 	// persistence is a convenience, not a gate on the cycle's result.
 	SessionStore *SessionStore
+
+	// Spawner governs subagent spawning (memory.md's `## Subagent Spawning`).
+	// Nil leaves Runtime.Spawn permissive; the loader wires one from the
+	// strategy so an authored "up to 3 subagents" limit is enforced.
+	Spawner *Spawner
 }
 
 // NewRuntime builds a Runtime with deterministic defaults for both seams and
@@ -123,6 +128,17 @@ func NewRuntime(name string, opts ...Option) *Runtime {
 		opt(r)
 	}
 	return r
+}
+
+// Spawn spawns a subagent scoped to persona and reasons intent through it,
+// returning the subagent's decision. It routes through the runtime's Spawner
+// so the strategy's spawn limits are enforced; a runtime with no Spawner
+// configured spawns permissively (a lazily-created, unbounded one).
+func (r *Runtime) Spawn(ctx context.Context, persona *Persona, intent Intent) (any, error) {
+	if r.Spawner == nil {
+		r.Spawner = &Spawner{Enabled: true}
+	}
+	return r.Spawner.Spawn(ctx, r, persona, intent)
 }
 
 // AddProcess stacks a process onto the runtime.

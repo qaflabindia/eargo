@@ -22,7 +22,7 @@ modules, ~21.5k lines). Update the marks as work lands.
 | DSPy layer (engine/LM) | 5 | 1 | 0 | 0 | 0 |
 | Strategy / loader | 2 | 1 | 0 | 0 | 0 |
 | Go-idiom enhancements | 7 | 0 | 0 | 0 | 0 |
-| Category B (infra/AGI planes) | 3 | 0 | 0 | 1 | ~39 |
+| Category B (infra/AGI planes) | 4 | 0 | 0 | 1 | ~38 |
 
 ---
 
@@ -84,7 +84,7 @@ binding a model lights up the ported signatures with no pipeline change.
 
 ## 4. Strategy / loader
 
-- 🟡 `strategy` — history capacity, audit retention, tools, ontology, subagent limits, discovery guidance ✅; **model binding wired** (`## Model Selection` auto-binds at load, key from env); **cross-session store wired** (`## Cross-Session Data` path parsed, restore-before/save-after); MCP / sandbox / energy / evolution / toolsets / auxiliary model ⬜ (recognised, inert)
+- 🟡 `strategy` — history capacity, audit retention, tools, ontology, discovery guidance ✅; **model binding wired** (`## Model Selection` auto-binds at load, key from env); **cross-session store wired** (`## Cross-Session Data` path parsed, restore-before/save-after); **subagent spawning wired** (`## Subagent Spawning` enable/limit → `Spawner`); MCP / sandbox / energy / evolution / toolsets / auxiliary model ⬜ (recognised, inert)
 - ✅ `ontology` — as part of Strategy
 - ✅ `loader` — skills/personas/policies/workflows/contracts/processes/tenant/scopes + escalation + retries + strategy wiring
 
@@ -106,7 +106,7 @@ binding a model lights up the ported signatures with no pipeline change.
 
 **Distributed / infra / persistence:** ⬜ `kernel` ⬜ `k8s` ⬜ `sandbox` ⬜ `store` ✅ `session_store` ⬜ `run` ⬜ `mcp_client` ⬜ `mcp_server` ⬜ `mcp_command_centre`
 
-**Enterprise-AGI / governance / cognition planes:** ⬜ `enterprise` ⬜ `authority` ⬜ `compiler` ⬜ `journey` ⬜ `examiner` ✅ `knowledge` ⬜ `knowledge_governance` ⬜ `evolution` ⬜ `evolution_loop` ⬜ `optimizer` ⬜ `acquirer` ⬜ `coder` ⬜ `epistemic` ⬜ `adversary` ⬜ `panel` ⬜ `goal` ⬜ `spawner` ✅ `tool_binder` ⬜ `tools_cli` ⬜ `identity` ⬜ `task` ⬜ `exchange` ⬜ `thrift` ⬜ `carbon` ⬜ `energy` ⬜ `hardware` ⬜ `caveman` ⬜ `router`
+**Enterprise-AGI / governance / cognition planes:** ⬜ `enterprise` ⬜ `authority` ⬜ `compiler` ⬜ `journey` ⬜ `examiner` ✅ `knowledge` ⬜ `knowledge_governance` ⬜ `evolution` ⬜ `evolution_loop` ⬜ `optimizer` ⬜ `acquirer` ⬜ `coder` ⬜ `epistemic` ⬜ `adversary` ⬜ `panel` ⬜ `goal` ✅ `spawner` ✅ `tool_binder` ⬜ `tools_cli` ⬜ `identity` ⬜ `task` ⬜ `exchange` ⬜ `thrift` ⬜ `carbon` ⬜ `energy` ⬜ `hardware` ⬜ `caveman` ⬜ `router`
 
 **Reconceived / already covered:** 🔵 `parallel` → `parallelMap` · ✅ `approval` → `ApprovalVerdict`
 

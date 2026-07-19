@@ -55,6 +55,14 @@ func WithBudget(budget float64, onAlert func(BudgetAlert), thresholds ...float64
 	}
 }
 
+// WithSubagents configures subagent spawning programmatically. The authored
+// path is a `## Subagent Spawning` section in memory.md ("Spawn up to 3
+// subagents."), read by LoadRuntime -- prefer that so the policy lives in
+// natural language. A limit of 0 means unbounded.
+func WithSubagents(enabled bool, limit int) Option {
+	return func(r *Runtime) { r.Spawner = &Spawner{Enabled: enabled, Limit: limit} }
+}
+
 // WithSessionStore attaches a cross-session store and restores from it at
 // once, so a hand-built runtime resumes warm before its first cycle. The
 // authored path is a `## Cross-Session Data` section in memory.md ("Persist

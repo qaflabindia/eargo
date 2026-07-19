@@ -464,6 +464,13 @@ func applyMemoryStrategy(runtime *Runtime, memoryText string) {
 	if client, ok := strategy.ModelClient(); ok {
 		attachLM(runtime, client)
 	}
+	// A `## Subagent Spawning` section wires the Spawner with the authored
+	// enable/limit -- so an author's "up to 3 subagents" (or "no subagents")
+	// is enforced when the runtime spawns. Left nil when unconfigured, keeping
+	// Runtime.Spawn permissive for a hand-built runtime.
+	if strategy.SubagentsConfigured {
+		runtime.Spawner = &Spawner{Enabled: strategy.SubagentsEnabled, Limit: strategy.MaxSubagents}
+	}
 }
 
 // -- helpers ---------------------------------------------------------------

@@ -12,9 +12,10 @@ import (
 // capacity, audit-trail retention, declared tools, the working ontology,
 // subagent-spawning limits and skills-discovery guidance -- and captures the
 // model-selection prose. It also parses pricing, budget, model selection,
-// knowledge sources and the cross-session store path (all wired). The
-// sections whose effect needs an unported plane (MCP, sandbox, energy,
-// evolution, toolsets, auxiliary model) are recognised but left inert.
+// knowledge sources, the cross-session store path and subagent-spawning
+// limits (all wired). The sections whose effect needs an unported plane (MCP,
+// sandbox, energy, evolution, toolsets, auxiliary model) are recognised but
+// left inert.
 type Strategy struct {
 	Raw string
 
