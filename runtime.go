@@ -85,6 +85,12 @@ type Runtime struct {
 	// Budget, when set (via WithBudget), tracks cumulative dollar spend and
 	// fires progressive threshold alerts. It never blocks the cycle.
 	Budget *BudgetMonitor
+
+	// ToolBinder holds the tools bound to executables (BindTool); ToolPolicies
+	// are the tool-scoped policies (memory.md `Applies to: tools`) judged
+	// against each tool call rather than the cycle.
+	ToolBinder   *ToolBinder
+	ToolPolicies []*Policy
 }
 
 // NewRuntime builds a Runtime with deterministic defaults for both seams and
@@ -100,6 +106,7 @@ func NewRuntime(name string, opts ...Option) *Runtime {
 		Reasoner:     DefaultReasoner{},
 		PolicyJudge:  DeterministicJudge{},
 		AdaptEvery:   5,
+		ToolBinder:   NewToolBinder(),
 	}
 	r.Pipeline = defaultPipeline()
 	for _, opt := range opts {

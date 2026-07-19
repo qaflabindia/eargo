@@ -368,9 +368,9 @@ func applyPolicyScopes(runtime *Runtime, policies map[string]*Policy, scopes map
 			lowered := strings.TrimSpace(strings.ToLower(target))
 			switch {
 			case toolScopes[Normalize(target)]:
-				// Tool-scoped policies are recorded on the runtime's policy
-				// set here (this port has no separate tool-policy plane yet).
-				runtime.AddPolicy(policy)
+				// Tool-scoped policies are judged per tool call, not per
+				// cycle -- so they get their own set (see Runtime.InvokeTool).
+				runtime.ToolPolicies = append(runtime.ToolPolicies, policy)
 			case runtimeScopes[lowered] || strings.Contains(lowered, "runtime"):
 				runtime.AddPolicy(policy)
 			default:
