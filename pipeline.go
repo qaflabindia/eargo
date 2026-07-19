@@ -1,21 +1,23 @@
 package ear
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
 )
 
-// This file holds the runtime's per-cycle pipeline stages, each its own
-// type so operations AI runtimes often blur together stay distinct:
+// The runtime's per-cycle pipeline, each operation a named step so concerns
+// AI runtimes often blur together stay distinct:
 //
-//	Governor -> Discoverer -> Selector -> Composer -> Scheduler ->
-//	Delegator -> Recaller -> Explainer -> Auditor -> Learner -> Adapter
+//	govern -> discover -> select -> compose -> schedule -> delegate ->
+//	recall -> reason -> explain -> audit -> learn -> adapt
 //
-// Every judgment-laden stage reasons against a live LLM in the Python
-// package; here each falls back to the same deterministic behaviour the
-// Python package uses when no model is bound. The mechanical stages
-// (Composer flattening, Validator shape checks) are identical either way.
+// The judgment-laden steps reason against a live LLM in the Python package;
+// here each falls back to the same deterministic behaviour that package uses
+// with no model bound. Rather than one empty struct per step, the mechanical
+// steps are Runtime methods and the two real seams (PolicyJudge, Reasoner)
+// are interfaces (see stage.go).
 
 // ApprovalVerdict is a human's verdict on an approval-gated policy.
 type ApprovalVerdict struct {
@@ -24,27 +26,35 @@ type ApprovalVerdict struct {
 	Note     string
 }
 
-// Governor is the regulation gate a cycle must clear before anything else
-// runs. It checks the runtime's policies against an intent's context and
-// reports which are violated, writing every judgment to the ReasoningLog.
-type Governor struct{}
-
-func (Governor) govern(r *Runtime, intent Intent, approval *ApprovalVerdict) []*Policy {
-	return violations(r.Policies, intent, r.ReasoningLog, approval)
+// judgment is one policy's judged result, carried back from a concurrent
+// fan-out so the trail can be written in deterministic policy order.
+type judgment struct {
+	policy    *Policy
+	complies  bool
+	rationale string
+	err       error
 }
 
-func (Governor) governWorkflows(r *Runtime, intent Intent, workflows []*Workflow, approval *ApprovalVerdict) []*Policy {
-	var policies []*Policy
-	for _, w := range workflows {
-		policies = append(policies, w.Policies...)
+// govern judges a set of policies against the intent and returns the
+// unresolved violations. Judgment is fanned out concurrently -- independent
+// per policy, and a network round-trip each when the judge is an LLM -- then
+// folded back in order so the audit trail stays deterministic. A judge error
+// fails the cycle closed rather than passing governance silently.
+func (r *Runtime) govern(ctx context.Context, policies []*Policy, intent Intent, approval *ApprovalVerdict) ([]*Policy, error) {
+	if len(policies) == 0 {
+		return nil, nil
 	}
-	return violations(policies, intent, r.ReasoningLog, approval)
-}
+	results := parallelMap(ctx, policies, func(ctx context.Context, policy *Policy) judgment {
+		complies, rationale, err := r.PolicyJudge.Judge(ctx, policy, intent.Context)
+		return judgment{policy, complies, rationale, err}
+	})
 
-func violations(policies []*Policy, intent Intent, log *ReasoningLog, approval *ApprovalVerdict) []*Policy {
-	var out []*Policy
-	for _, policy := range policies {
-		complies, rationale := policy.Judge(intent.Context)
+	var violations []*Policy
+	for _, res := range results {
+		if res.err != nil {
+			return nil, fmt.Errorf("judging policy %q: %w", res.policy.Name, res.err)
+		}
+		policy, complies, rationale := res.policy, res.complies, res.rationale
 
 		gated := !complies && policy.ApprovalRequired
 		var verdict *bool
@@ -67,19 +77,18 @@ func violations(policies []*Policy, intent Intent, log *ReasoningLog, approval *
 		case verdict == nil:
 			output = "PENDING APPROVAL"
 		case offList:
-			approver := approvalName(approval)
 			output = fmt.Sprintf("REFUSED -- %s is not an approved approver for %s (allowed: %s)",
-				approver, policy.Name, strings.Join(policy.Approvers, ", "))
+				approvalName(approval), policy.Name, strings.Join(policy.Approvers, ", "))
 		case waived:
 			output = "approved by " + approvalName(approval)
 		default:
 			output = "REJECTED by " + approvalName(approval)
 		}
 		if gated && verdict != nil && approval.Note != "" {
-			rationale = rationale + " | approver: " + approval.Note
+			rationale += " | approver: " + approval.Note
 		}
-		if log != nil {
-			log.Record(Record{
+		if r.ReasoningLog != nil {
+			r.ReasoningLog.Record(Record{
 				Stage:     stage,
 				Inputs:    map[string]any{"policy": policy.Name, "statement": policy.Statement, "context": intent.Context},
 				Output:    output,
@@ -87,10 +96,18 @@ func violations(policies []*Policy, intent Intent, log *ReasoningLog, approval *
 			})
 		}
 		if !complies && !waived {
-			out = append(out, policy)
+			violations = append(violations, policy)
 		}
 	}
-	return out
+	return violations, nil
+}
+
+func workflowPolicies(workflows []*Workflow) []*Policy {
+	var policies []*Policy
+	for _, w := range workflows {
+		policies = append(policies, w.Policies...)
+	}
+	return policies
 }
 
 func approvalName(a *ApprovalVerdict) string {
@@ -100,11 +117,9 @@ func approvalName(a *ApprovalVerdict) string {
 	return a.Approver
 }
 
-// Discoverer finds which of the runtime's processes are relevant to an
-// intent. Deterministically this is keyword overlap against process names.
-type Discoverer struct{}
-
-func (Discoverer) discover(r *Runtime, intent Intent) []*Process {
+// discover finds which processes are relevant to an intent. Deterministically
+// this is keyword overlap against process names.
+func (r *Runtime) discover(intent Intent) []*Process {
 	found := discoverByKeyword(r.Processes, intent)
 	if r.ReasoningLog != nil {
 		r.ReasoningLog.Record(Record{
@@ -137,13 +152,11 @@ func discoverByKeyword(processes []*Process, intent Intent) []*Process {
 	return matches
 }
 
-// Selector chooses which discovered processes actually run this cycle.
+// selectProcesses chooses which discovered processes run this cycle.
 // Deterministically it deduplicates in discovery order.
-type Selector struct{}
-
-func (Selector) selectProcesses(candidates []*Process) []*Process {
-	seen := map[string]bool{}
-	var out []*Process
+func selectProcesses(candidates []*Process) []*Process {
+	seen := make(map[string]bool, len(candidates))
+	out := make([]*Process, 0, len(candidates))
 	for _, p := range candidates {
 		if !seen[p.Name] {
 			seen[p.Name] = true
@@ -153,11 +166,8 @@ func (Selector) selectProcesses(candidates []*Process) []*Process {
 	return out
 }
 
-// Composer flattens the workflows of every selected process into one
-// composed plan. Purely mechanical -- no judgment.
-type Composer struct{}
-
-func (Composer) compose(selected []*Process) []*Workflow {
+// compose flattens the workflows of every selected process into one plan.
+func compose(selected []*Process) []*Workflow {
 	var plan []*Workflow
 	for _, p := range selected {
 		plan = append(plan, p.Workflows...)
@@ -165,70 +175,34 @@ func (Composer) compose(selected []*Process) []*Workflow {
 	return plan
 }
 
-// Scheduler orders the composed plan before execution. Deterministically it
-// keeps composition order (a defensive copy).
-type Scheduler struct{}
-
-func (Scheduler) schedule(plan []*Workflow) []*Workflow {
+// schedule orders the composed plan. Deterministically it keeps composition
+// order (a defensive copy).
+func schedule(plan []*Workflow) []*Workflow {
 	return append([]*Workflow{}, plan...)
 }
 
-// Delegator assigns undelegated workflow steps to personas.
-// Deterministically (no model) it leaves each step exactly as authored.
-type Delegator struct{}
+// recall recalls the Memory context relevant to a cycle. Deterministically
+// it returns the full context window, so nothing is lost offline.
+func (r *Runtime) recall() string { return r.Memory.ContextWindow() }
 
-func (Delegator) delegate(_ *Runtime, _ Intent, plan []*Workflow) []*Workflow { return plan }
-
-// Recaller recalls the Memory context relevant to a cycle. Deterministically
-// it returns the full context window, so nothing is ever lost offline.
-type Recaller struct{}
-
-func (Recaller) recall(m *Memory) string { return m.ContextWindow() }
-
-// Explainer renders a human-readable explanation of why a decision was
-// reached. Deterministically it pairs the evidence basis with the decision.
-type Explainer struct{}
-
-func (Explainer) explain(evidence *Evidence, decision any) string {
+// explain renders why a decision was reached. Deterministically it pairs the
+// evidence basis with the decision.
+func explain(evidence *Evidence, decision any) string {
 	return fmt.Sprintf("%s -> %v", evidence.Basis, decision)
 }
 
-// Auditor inspects a cycle's Evidence for compliance before it is committed
-// to Memory. Deterministically it records only that the audit point passed.
-type Auditor struct{}
-
-func (Auditor) audit(evidence *Evidence) *Evidence {
+// audit records that the audit point was passed. Deterministically there is
+// no model to assess the evidence, so only the control fact is recorded.
+func audit(evidence *Evidence) *Evidence {
 	if _, ok := evidence.Sources["audited"]; !ok {
 		evidence.Sources["audited"] = true
 	}
 	return evidence
 }
 
-// Learner folds a committed Memory entry into Experience.
-type Learner struct{}
-
-func (Learner) learn(x *Experience, entry MemoryEntry) *Experience { return x.ObserveEntry(entry) }
-
-// Adapter periodically distills Experience into a new Adaptation, throttled
-// by AdaptEvery observed cycles.
-type Adapter struct {
-	AdaptEvery int
-}
-
-func (a Adapter) adapt(bank *AdaptationBank, x *Experience) *Adaptation {
-	if a.AdaptEvery <= 0 || x.Observations == 0 {
-		return nil
-	}
-	if x.Observations%a.AdaptEvery != 0 {
-		return nil
-	}
-	return bank.LearnFrom(x)
-}
-
-// Validator checks the output of every maker stage in the pipeline.
-type Validator struct{}
-
-func (Validator) validate(decision any) (any, error) {
+// validate rejects a malformed (empty) decision before the next step trusts
+// it.
+func validate(decision any) (any, error) {
 	if s, ok := decision.(string); ok && strings.TrimSpace(s) == "" {
 		return nil, fmt.Errorf("validator rejected an empty decision")
 	}

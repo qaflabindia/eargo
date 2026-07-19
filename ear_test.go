@@ -1,6 +1,7 @@
 package ear
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -165,7 +166,7 @@ func buildRuntime() *Runtime {
 
 func TestReasonCompliant(t *testing.T) {
 	rt := buildRuntime()
-	decision, err := rt.Reason(NewIntent("Underwrite a loan",
+	decision, err := rt.Reason(context.Background(), NewIntent("Underwrite a loan",
 		map[string]any{"loan_amount": 20000.0, "debt_to_income": 0.28}), nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -181,7 +182,7 @@ func TestReasonCompliant(t *testing.T) {
 
 func TestReasonRuntimePolicyBlock(t *testing.T) {
 	rt := buildRuntime()
-	_, err := rt.Reason(NewIntent("Underwrite a loan",
+	_, err := rt.Reason(context.Background(), NewIntent("Underwrite a loan",
 		map[string]any{"loan_amount": 20000.0, "debt_to_income": 0.60}), nil)
 	var pv *PolicyViolationError
 	if !errors.As(err, &pv) {
@@ -194,7 +195,7 @@ func TestReasonRuntimePolicyBlock(t *testing.T) {
 
 func TestReasonWorkflowPolicyBlock(t *testing.T) {
 	rt := buildRuntime()
-	_, err := rt.Reason(NewIntent("Underwrite a loan",
+	_, err := rt.Reason(context.Background(), NewIntent("Underwrite a loan",
 		map[string]any{"loan_amount": 90000.0, "debt_to_income": 0.28}), nil)
 	var pv *PolicyViolationError
 	if !errors.As(err, &pv) {
@@ -220,7 +221,7 @@ func TestApprovalGate(t *testing.T) {
 	intent := NewIntent("Underwrite a large loan", map[string]any{"loan_amount": 60000.0})
 
 	// No verdict -> parked for approval.
-	_, err := rt.Reason(intent, nil)
+	_, err := rt.Reason(context.Background(), intent, nil)
 	var ar *ApprovalRequiredError
 	if !errors.As(err, &ar) {
 		t.Fatalf("expected ApprovalRequiredError, got %v", err)
@@ -228,7 +229,7 @@ func TestApprovalGate(t *testing.T) {
 
 	// Approved by an allowed approver -> proceeds.
 	yes := true
-	decision, err := rt.Reason(intent, &ApprovalVerdict{Approver: "Risk Officer", Verdict: &yes})
+	decision, err := rt.Reason(context.Background(), intent, &ApprovalVerdict{Approver: "Risk Officer", Verdict: &yes})
 	if err != nil {
 		t.Fatalf("approved cycle errored: %v", err)
 	}
@@ -237,14 +238,14 @@ func TestApprovalGate(t *testing.T) {
 	}
 
 	// Approved by an off-list approver -> still blocked.
-	_, err = rt.Reason(intent, &ApprovalVerdict{Approver: "Intern", Verdict: &yes})
+	_, err = rt.Reason(context.Background(), intent, &ApprovalVerdict{Approver: "Intern", Verdict: &yes})
 	if err == nil {
 		t.Fatal("off-list approver should not waive the gate")
 	}
 
 	// Rejected -> hard block.
 	no := false
-	_, err = rt.Reason(intent, &ApprovalVerdict{Approver: "Risk Officer", Verdict: &no})
+	_, err = rt.Reason(context.Background(), intent, &ApprovalVerdict{Approver: "Risk Officer", Verdict: &no})
 	var pv *PolicyViolationError
 	if !errors.As(err, &pv) {
 		t.Fatalf("rejected gate should hard-block, got %v", err)

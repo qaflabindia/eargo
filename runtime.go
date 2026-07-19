@@ -1,23 +1,20 @@
 package ear
 
 import (
+	"context"
 	"fmt"
 	"strings"
 )
 
-// PolicyViolationError is raised when a cycle is hard-blocked by one or more
-// non-gated policy violations (or a human rejected an approval gate).
+// PolicyViolationError is returned when a cycle is hard-blocked by one or
+// more non-gated policy violations (or a human rejected an approval gate).
 type PolicyViolationError struct {
 	Scope    string
 	Policies []*Policy
 }
 
 func (e *PolicyViolationError) Error() string {
-	names := make([]string, len(e.Policies))
-	for i, p := range e.Policies {
-		names[i] = p.Name
-	}
-	return fmt.Sprintf("%s violated: %s", e.Scope, strings.Join(names, ", "))
+	return fmt.Sprintf("%s violated: %s", e.Scope, strings.Join(policyNames(e.Policies), ", "))
 }
 
 // ApprovalRequiredError parks a cycle for a human verdict: only
@@ -27,17 +24,26 @@ type ApprovalRequiredError struct {
 }
 
 func (e *ApprovalRequiredError) Error() string {
-	names := make([]string, len(e.Policies))
-	for i, p := range e.Policies {
-		names[i] = p.Name
-	}
-	return "human approval required for: " + strings.Join(names, ", ")
+	return "human approval required for: " + strings.Join(policyNames(e.Policies), ", ")
 }
 
-// Runtime is the battlefield: every cycle runs through the full
-// Governor/Discoverer/Selector/Composer/Scheduler/Delegator/Reasoner
-// pipeline, and is recorded across the Evidence (why) / Memory (what) /
-// Experience (pattern) / Adaptation (adaptation) layers.
+func policyNames(policies []*Policy) []string {
+	names := make([]string, len(policies))
+	for i, p := range policies {
+		names[i] = p.Name
+	}
+	return names
+}
+
+// Runtime is the battlefield: every cycle runs through the full govern ->
+// discover -> select -> compose -> schedule -> delegate -> reason pipeline,
+// and is recorded across the Evidence (why) / Memory (what) / Experience
+// (pattern) / Adaptation (adaptation) layers.
+//
+// The two extension seams -- PolicyJudge and Reasoner -- are interfaces, so a
+// provider-backed implementation slots in without touching the pipeline. The
+// mechanical steps are methods. Construct with NewRuntime and configure with
+// Options.
 type Runtime struct {
 	Name        string
 	Tenant      Tenant
@@ -49,34 +55,33 @@ type Runtime struct {
 
 	ReasoningLog *ReasoningLog
 
-	// Per-cycle pipeline stages.
-	Reasoner   Reasoner
-	Governor   Governor
-	Discoverer Discoverer
-	Selector   Selector
-	Composer   Composer
-	Scheduler  Scheduler
-	Delegator  Delegator
-	Validator  Validator
-	Recaller   Recaller
-	Explainer  Explainer
-	Auditor    Auditor
-	Learner    Learner
-	Adapter    Adapter
+	// Seams: swap either for a provider-backed implementation.
+	Reasoner    Reasoner
+	PolicyJudge PolicyJudge
+
+	// AdaptEvery throttles adaptation distillation to every Nth observed
+	// cycle. Zero disables it.
+	AdaptEvery int
 }
 
-// NewRuntime builds a Runtime with all layers and stages initialized to
-// their defaults.
-func NewRuntime(name string) *Runtime {
-	return &Runtime{
+// NewRuntime builds a Runtime with deterministic defaults for both seams and
+// all memory layers initialized, then applies any Options.
+func NewRuntime(name string, opts ...Option) *Runtime {
+	r := &Runtime{
 		Name:         name,
 		Tenant:       NewTenant(),
 		Memory:       NewMemory(),
 		Experience:   NewExperience(),
 		Adaptations:  NewAdaptationBank(),
 		ReasoningLog: &ReasoningLog{},
-		Adapter:      Adapter{AdaptEvery: 5},
+		Reasoner:     DefaultReasoner{},
+		PolicyJudge:  DeterministicJudge{},
+		AdaptEvery:   5,
 	}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
 }
 
 // AddProcess stacks a process onto the runtime.
@@ -91,64 +96,83 @@ func (r *Runtime) AddPolicy(p *Policy) *Runtime {
 	return r
 }
 
-// EnforcePolicies returns the runtime-wide policies violated by the context.
-func (r *Runtime) EnforcePolicies(context map[string]any) []*Policy {
+// EnforcePolicies returns the runtime-wide policies violated by the context,
+// judged with the runtime's PolicyJudge.
+func (r *Runtime) EnforcePolicies(ctx context.Context, context map[string]any) ([]*Policy, error) {
 	var out []*Policy
 	for _, p := range r.Policies {
-		if !p.Evaluate(context) {
+		complies, _, err := r.PolicyJudge.Judge(ctx, p, context)
+		if err != nil {
+			return nil, err
+		}
+		if !complies {
 			out = append(out, p)
 		}
 	}
-	return out
+	return out, nil
 }
 
 // Reason runs one reasoning cycle end to end through the named pipeline and
-// returns the decision. A hard policy block returns *PolicyViolationError; a
-// parked approval gate returns *ApprovalRequiredError. approval may be nil.
-func (r *Runtime) Reason(intent Intent, approval *ApprovalVerdict) (any, error) {
+// returns the decision. It honours ctx: a cancelled or deadline-exceeded
+// context aborts the cycle at the next checkpoint and returns ctx.Err(). A
+// hard policy block returns *PolicyViolationError; a parked approval gate
+// returns *ApprovalRequiredError.
+func (r *Runtime) Reason(ctx context.Context, intent Intent, approval *ApprovalVerdict) (any, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	r.ReasoningLog.BeginCycle(intent)
 
 	// Governance gate 1: runtime-wide policies.
-	if v := r.Governor.govern(r, intent, approval); len(v) > 0 {
-		if err := r.enforce(v, approval, "Policy"); err != nil {
-			return nil, err
-		}
+	violations, err := r.govern(ctx, r.Policies, intent, approval)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.enforce(violations, approval, "Policy"); err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 
-	candidates := r.Discoverer.discover(r, intent)
-	selected := r.Selector.selectProcesses(candidates)
-	plan := r.Composer.compose(selected)
-	scheduled := r.Scheduler.schedule(plan)
+	candidates := r.discover(intent)
+	selected := selectProcesses(candidates)
+	plan := compose(selected)
+	scheduled := schedule(plan)
 
 	// Governance gate 2: workflow-scoped policies, once the plan is known.
-	if v := r.Governor.governWorkflows(r, intent, scheduled, approval); len(v) > 0 {
-		if err := r.enforce(v, approval, "Workflow policy"); err != nil {
-			return nil, err
-		}
+	violations, err = r.govern(ctx, workflowPolicies(scheduled), intent, approval)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.enforce(violations, approval, "Workflow policy"); err != nil {
+		return nil, err
 	}
 
-	r.Delegator.delegate(r, intent, scheduled)
-	recalled := r.Recaller.recall(r.Memory)
+	recalled := r.recall()
 
-	decision := r.Reasoner.reason(r, intent, scheduled)
-	decision, err := r.Validator.validate(decision)
+	decision, err := r.Reasoner.Reason(ctx, r, intent, scheduled)
+	if err != nil {
+		return nil, err
+	}
+	decision, err = validate(decision)
 	if err != nil {
 		return nil, err
 	}
 
 	evidence := r.buildEvidence(intent, scheduled, recalled)
-	explanation := r.Explainer.explain(evidence, decision)
+	explanation := explain(evidence, decision)
 	evidence.Sources["explanation"] = explanation
 	r.ReasoningLog.Record(Record{
 		Stage:  "explanation",
 		Inputs: map[string]any{"basis": evidence.Basis, "decision": fmt.Sprint(decision)},
 		Output: explanation,
 	})
-	r.Auditor.audit(evidence)
+	audit(evidence)
 
 	entry := r.Memory.Record(intent.Text, decision, intent.Context, evidence)
-	r.Learner.learn(r.Experience, entry)
-	if learned := r.Adapter.adapt(r.Adaptations, r.Experience); learned != nil {
+	r.Experience.ObserveEntry(entry)
+	if learned := r.adapt(); learned != nil {
 		r.ReasoningLog.Record(Record{
 			Stage:  "adaptation",
 			Inputs: map[string]any{"experience": r.Experience.Summary()},
@@ -158,10 +182,24 @@ func (r *Runtime) Reason(intent Intent, approval *ApprovalVerdict) (any, error) 
 	return decision, nil
 }
 
-// enforce turns the Governor's unresolved violations into a stop: a hard
-// block when any non-gated policy is violated (or a human rejected the
-// gate), a parked approval when only approval-gated policies remain.
+// adapt distills a new Adaptation every AdaptEvery observed cycles.
+func (r *Runtime) adapt() *Adaptation {
+	if r.AdaptEvery <= 0 || r.Experience.Observations == 0 {
+		return nil
+	}
+	if r.Experience.Observations%r.AdaptEvery != 0 {
+		return nil
+	}
+	return r.Adaptations.LearnFrom(r.Experience)
+}
+
+// enforce turns unresolved violations into a stop: a hard block when any
+// non-gated policy is violated (or a human rejected the gate), a parked
+// approval when only approval-gated policies remain, nil when clear.
 func (r *Runtime) enforce(violations []*Policy, approval *ApprovalVerdict, scope string) error {
+	if len(violations) == 0 {
+		return nil
+	}
 	rejected := approval != nil && approval.Verdict != nil && !*approval.Verdict
 	var blocking, pending []*Policy
 	for _, p := range violations {
@@ -174,14 +212,10 @@ func (r *Runtime) enforce(violations []*Policy, approval *ApprovalVerdict, scope
 	if len(blocking) > 0 {
 		return &PolicyViolationError{Scope: scope, Policies: blocking}
 	}
-	names := make([]string, len(pending))
-	for i, p := range pending {
-		names[i] = p.Name
-	}
 	r.ReasoningLog.Record(Record{
 		Stage:  "approval",
-		Inputs: map[string]any{"policies": names},
-		Output: "PENDING -- human approval required for: " + strings.Join(names, ", "),
+		Inputs: map[string]any{"policies": policyNames(pending)},
+		Output: "PENDING -- human approval required for: " + strings.Join(policyNames(pending), ", "),
 	})
 	return &ApprovalRequiredError{Policies: pending}
 }
@@ -190,15 +224,11 @@ func (r *Runtime) enforce(violations []*Policy, approval *ApprovalVerdict, scope
 // what was decided (Memory) or any pattern drawn from repeating it.
 func (r *Runtime) buildEvidence(intent Intent, plan []*Workflow, recalled string) *Evidence {
 	evidence := NewEvidence("Resolved via the Reasoner's dependency-free default")
-	policyNames := make([]string, len(r.Policies))
-	for i, p := range r.Policies {
-		policyNames[i] = p.Name
-	}
 	planNames := make([]string, len(plan))
 	for i, w := range plan {
 		planNames[i] = w.Name
 	}
-	evidence.Sources["policies_checked"] = policyNames
+	evidence.Sources["policies_checked"] = policyNames(r.Policies)
 	evidence.Sources["context"] = intent.Context
 	evidence.Sources["plan"] = planNames
 	evidence.Sources["recalled_memory"] = recalled

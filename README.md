@@ -14,6 +14,39 @@ markdown-native stack, while running natively on Go's standard library.
 > ethos — and its structs + interfaces map cleanly onto the data model and
 > the pipeline stages. So this is a Go port, by agreement.
 
+## Idiomatic to Go, not transliterated from Python
+
+This is a redesign around Go's strengths, not a line-for-line port:
+
+- **`context.Context` threads the whole cycle.** `Reason(ctx, intent,
+  approval)` honours cancellation and deadlines at every checkpoint — the
+  defining idiom for a runtime whose real stages are network calls. A
+  cancelled context aborts the cycle and returns `ctx.Err()`.
+- **The two real seams are interfaces, not 14 empty structs.** EAR calls its
+  judgment stages "seams" — swap one implementation for another. In Go that
+  is `PolicyJudge` (how a policy is judged) and `Reasoner` (how the runtime
+  deliberates), each with a deterministic default and a provider-backed
+  implementation slotting in untouched. The mechanical steps are plain
+  methods. No per-stage allocation, no indirection tax.
+- **Governance fans out concurrently.** Policies are judged in parallel
+  (`parallelMap`, order-preserving, bounded to `GOMAXPROCS`, dependency-free)
+  and folded back in order so the audit trail stays deterministic. When the
+  judge is an LLM, this turns a *sum* of latencies into a *max* — a serial
+  ~400 ms of ten provider calls becomes one round-trip's wait. A judge error
+  fails the cycle **closed** rather than passing governance silently.
+- **Functional options** (`NewRuntime(name, WithReasoner(...),
+  WithPolicyJudge(...), WithMemoryCapacity(...))`) keep construction stable
+  as configuration grows.
+- **Generics** collapse the loader's four near-identical reference resolvers
+  into one `resolve[T]`.
+- **The audit trail streams and iterates.** Set `ReasoningLog.Sink` to any
+  `io.Writer` for append-only JSONL (the trail Python flushes to disk), and
+  walk records with a `range`-over-func iterator (`for rec := range
+  log.Records()`, Go 1.23+) without materializing a slice.
+
+Everything is race-clean (`go test -race`) and benchmarked
+(`BenchmarkReasonDeterministic`, `BenchmarkSafeEval`).
+
 ## Scope of this port
 
 The Python package is ~21,500 lines across 90+ modules. This port
@@ -29,11 +62,14 @@ behaviour you get when no provider is configured:
 | Governance (`Policy`, approval gates, approver allow-lists) | `policy.go` | ✅ |
 | Memory layers (`Evidence`, `Memory`, `Experience`, `Adaptation`) | `memory.go` | ✅ |
 | Tenancy (`Tenant`, fiscal-year bounds) | `tenant.go` | ✅ |
-| Audit trail (`ReasoningLog`) | `reasoninglog.go` | ✅ |
-| Per-cycle pipeline stages (Governor → … → Adapter) | `pipeline.go` | ✅ |
-| Reasoner (deterministic decision + capabilities rendering) | `reasoner.go` | ✅ |
-| Runtime cycle (`Reason`, two governance gates, evidence, memory) | `runtime.go` | ✅ |
-| Markdown stack loader (`LoadRuntime`) | `loader.go` | ✅ |
+| Audit trail (`ReasoningLog`, JSONL sink, record iterator) | `reasoninglog.go` | ✅ |
+| Seam interfaces + defaults (`PolicyJudge`, `Reasoner`) | `stage.go` | ✅ |
+| Order-preserving concurrent fan-out (`parallelMap`) | `concurrent.go` | ✅ |
+| Per-cycle pipeline steps (govern → … → adapt) | `pipeline.go` | ✅ |
+| Deterministic deliberation helpers | `reasoner.go` | ✅ |
+| Runtime cycle (`Reason(ctx,…)`, two governance gates, evidence, memory) | `runtime.go` | ✅ |
+| Functional options (`WithReasoner`, `WithPolicyJudge`, …) | `options.go` | ✅ |
+| Markdown stack loader (`LoadRuntime`, generic `resolve[T]`) | `loader.go` | ✅ |
 | CLI demo | `cmd/ear` | ✅ |
 
 **Not yet ported** (the LLM-facing and infrastructure surfaces): the
@@ -66,10 +102,19 @@ proc.AddWorkflow(w)
 rt := ear.NewRuntime("Credit Risk Runtime")
 rt.AddProcess(proc)
 
-decision, err := rt.Reason(ear.NewIntent(
+decision, err := rt.Reason(context.Background(), ear.NewIntent(
     "Underwrite a $20,000 consumer loan application",
     map[string]any{"loan_amount": 20000.0, "debt_to_income": 0.28},
 ), nil)
+```
+
+To reason against a live model, swap the seams — the pipeline is untouched:
+
+```go
+rt := ear.NewRuntime("Credit Risk Runtime",
+    ear.WithReasoner(myLLMReasoner),   // implements ear.Reasoner
+    ear.WithPolicyJudge(myLLMJudge),   // implements ear.PolicyJudge
+)
 ```
 
 Or author the whole stack in markdown and load it — the same
@@ -77,7 +122,7 @@ Or author the whole stack in markdown and load it — the same
 
 ```go
 rt, err := ear.LoadRuntime("examples/credit_risk_stack", "")
-decision, err := rt.Reason(intent, nil)
+decision, err := rt.Reason(context.Background(), intent, nil)
 ```
 
 ## CLI

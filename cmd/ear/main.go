@@ -13,6 +13,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -78,7 +79,7 @@ func runBuiltin() {
 }
 
 func reason(runtime *ear.Runtime, intent ear.Intent) {
-	decision, err := runtime.Reason(intent, nil)
+	decision, err := runtime.Reason(context.Background(), intent, nil)
 	if err != nil {
 		fmt.Println("blocked:", err)
 		return

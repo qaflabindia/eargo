@@ -5,31 +5,11 @@ import (
 	"strings"
 )
 
-// Reasoner deliberates over an intent given the scheduled plan. In the
-// Python package it either calls the bound LLM over the stacked capabilities
-// block or, with no model, produces a deterministic rendering that names the
-// runtime, the processes, the capabilities applied and the memory drawn on.
-// This port implements that deterministic path, and renders the same stacked
-// capabilities block so the author's stacking is what shapes the output.
-type Reasoner struct{}
-
-func (Reasoner) reason(r *Runtime, intent Intent, plan []*Workflow) any {
-	capabilities := renderCapabilities(plan)
-	decision := defaultReasoning(r, intent, capabilities)
-	if r.ReasoningLog != nil {
-		r.ReasoningLog.Record(Record{
-			Stage: "deliberation",
-			Inputs: map[string]any{
-				"intent":       intent.Text,
-				"context":      intent.Context,
-				"capabilities": capabilities,
-				"memory":       r.Memory.ContextWindow(),
-			},
-			Output: fmt.Sprint(decision),
-		})
-	}
-	return decision
-}
+// This file holds the deterministic deliberation helpers used by
+// DefaultReasoner (see stage.go). Keeping them free functions -- rather than
+// methods on an empty struct -- lets a provider-backed Reasoner reuse the
+// exact same stacked-capabilities rendering the deterministic path uses, so
+// what the author stacked is what any reasoner sees.
 
 // defaultReasoning is the dependency-free decision: it names the runtime,
 // the processes it resolved across, the capabilities it applied and the
@@ -71,27 +51,35 @@ func renderCapabilities(plan []*Workflow) string {
 	if len(plan) == 0 {
 		return ""
 	}
-	var lines []string
+	var b strings.Builder
+	first := true
+	writeLine := func(s string) {
+		if !first {
+			b.WriteByte('\n')
+		}
+		b.WriteString(s)
+		first = false
+	}
 	for _, w := range plan {
 		if w.Name != "" {
-			lines = append(lines, "Workflow "+w.Name+":")
+			writeLine("Workflow " + w.Name + ":")
 		}
 		for number, step := range w.Steps {
 			delegate := ""
 			if step.Persona != nil {
 				delegate = " [delegated to Persona " + step.Persona.Name + "]"
 			}
-			lines = append(lines, fmt.Sprintf("  Step %d: %s%s", number+1, step.Instruction, delegate))
-			renderPersona(step.Persona, &lines, "      ", false)
+			writeLine(fmt.Sprintf("  Step %d: %s%s", number+1, step.Instruction, delegate))
+			renderPersona(step.Persona, writeLine, "      ", false)
 		}
 		for _, p := range w.Personas {
-			renderPersona(p, &lines, "  ", true)
+			renderPersona(p, writeLine, "  ", true)
 		}
 	}
-	return strings.Join(lines, "\n")
+	return b.String()
 }
 
-func renderPersona(persona *Persona, lines *[]string, indent string, header bool) {
+func renderPersona(persona *Persona, writeLine func(string), indent string, header bool) {
 	if persona == nil {
 		return
 	}
@@ -100,11 +88,11 @@ func renderPersona(persona *Persona, lines *[]string, indent string, header bool
 		if persona.Instructions != "" {
 			line += ": " + persona.Instructions
 		}
-		*lines = append(*lines, line)
+		writeLine(line)
 	} else if persona.Instructions != "" {
-		*lines = append(*lines, indent+"Persona "+persona.Name+": "+persona.Instructions)
+		writeLine(indent + "Persona " + persona.Name + ": " + persona.Instructions)
 	}
 	for _, skill := range persona.Skills {
-		*lines = append(*lines, indent+"  - Skill "+skill.Name+": "+skill.Instruction())
+		writeLine(indent + "  - Skill " + skill.Name + ": " + skill.Instruction())
 	}
 }

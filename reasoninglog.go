@@ -1,6 +1,9 @@
 package ear
 
 import (
+	"encoding/json"
+	"io"
+	"iter"
 	"strings"
 	"sync"
 )
@@ -8,28 +11,33 @@ import (
 // ReasoningLog is the audit trail of every reasoning step -- policy
 // judgments with their rationale, discovery, the deliberation with the full
 // stacked prompt material, and the explanation -- so governance and
-// reasoning leave a reviewable record rather than a bare boolean. In the
-// Python package it also flushes to JSONL; here it is held in memory and
-// grouped into cycles, which is enough for the deterministic spine.
+// reasoning leave a reviewable record rather than a bare boolean.
+//
+// If Sink is set, each Record is also streamed to it as a JSON line
+// (JSONL), the same append-only trail the Python package flushes to disk;
+// point Sink at an *os.File to persist it, or a bytes.Buffer to capture it.
+// The in-memory Cycles always accumulate regardless of Sink.
 type ReasoningLog struct {
 	mu      sync.Mutex
+	Sink    io.Writer
 	Cycles  []Cycle
 	current *Cycle
+	enc     *json.Encoder
 }
 
 // Cycle is one reasoning cycle's ordered records.
 type Cycle struct {
-	IntentText string
-	Records    []Record
+	IntentText string   `json:"intent"`
+	Records    []Record `json:"records"`
 }
 
 // Record is one logged reasoning step.
 type Record struct {
-	Stage     string
-	Inputs    map[string]any
-	Output    string
-	Rationale string
-	Model     string
+	Stage     string         `json:"stage"`
+	Inputs    map[string]any `json:"inputs,omitempty"`
+	Output    string         `json:"output"`
+	Rationale string         `json:"rationale,omitempty"`
+	Model     string         `json:"model"`
 }
 
 // BeginCycle opens a new cycle keyed to the intent.
@@ -40,8 +48,8 @@ func (l *ReasoningLog) BeginCycle(intent Intent) {
 	l.current = &l.Cycles[len(l.Cycles)-1]
 }
 
-// Record appends one step to the current cycle (or a headless cycle if none
-// is open, so records are never lost).
+// Record appends one step to the current cycle (opening a headless cycle if
+// none is active, so records are never lost) and streams it to Sink.
 func (l *ReasoningLog) Record(r Record) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -53,6 +61,14 @@ func (l *ReasoningLog) Record(r Record) {
 		r.Model = "deterministic-fallback"
 	}
 	l.current.Records = append(l.current.Records, r)
+	if l.Sink != nil {
+		if l.enc == nil {
+			l.enc = json.NewEncoder(l.Sink)
+		}
+		// Best-effort streaming: a sink write failure must never crash a
+		// reasoning cycle, and the record is retained in memory regardless.
+		_ = l.enc.Encode(r)
+	}
 }
 
 // LastCycle returns the most recent cycle, or nil.
@@ -63,6 +79,28 @@ func (l *ReasoningLog) LastCycle() *Cycle {
 		return nil
 	}
 	return &l.Cycles[len(l.Cycles)-1]
+}
+
+// Records returns a single-pass iterator over every record across every
+// cycle, in order. It is a range-over-func iterator (Go 1.23+), so callers
+// can `for rec := range log.Records()` without materializing a slice:
+//
+//	for rec := range log.Records() {
+//	    if rec.Stage == "policy" { ... }
+//	}
+func (l *ReasoningLog) Records() iter.Seq[Record] {
+	return func(yield func(Record) bool) {
+		l.mu.Lock()
+		cycles := l.Cycles
+		l.mu.Unlock()
+		for i := range cycles {
+			for _, rec := range cycles[i].Records {
+				if !yield(rec) {
+					return
+				}
+			}
+		}
+	}
 }
 
 // Render renders the whole trail as readable markdown, one section per

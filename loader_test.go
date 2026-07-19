@@ -1,6 +1,7 @@
 package ear
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -38,7 +39,7 @@ func TestLoadExampleStack(t *testing.T) {
 	}
 
 	// A compliant application reasons to a decision.
-	decision, err := rt.Reason(NewIntent("Underwrite a $20,000 consumer loan application",
+	decision, err := rt.Reason(context.Background(), NewIntent("Underwrite a $20,000 consumer loan application",
 		map[string]any{"loan_amount": 20000.0, "debt_to_income": 0.28, "credit_score": 742.0}), nil)
 	if err != nil {
 		t.Fatalf("compliant cycle errored: %v", err)
@@ -48,7 +49,7 @@ func TestLoadExampleStack(t *testing.T) {
 	}
 
 	// Over the DTI ceiling -> runtime policy hard-block.
-	_, err = rt.Reason(NewIntent("Underwrite a loan",
+	_, err = rt.Reason(context.Background(), NewIntent("Underwrite a loan",
 		map[string]any{"loan_amount": 20000.0, "debt_to_income": 0.60, "credit_score": 742.0}), nil)
 	var pv *PolicyViolationError
 	if !errors.As(err, &pv) {
@@ -56,7 +57,7 @@ func TestLoadExampleStack(t *testing.T) {
 	}
 
 	// Over the loan cap -> workflow policy block once the plan is composed.
-	_, err = rt.Reason(NewIntent("Underwrite a $90,000 consumer loan application",
+	_, err = rt.Reason(context.Background(), NewIntent("Underwrite a $90,000 consumer loan application",
 		map[string]any{"loan_amount": 90000.0, "debt_to_income": 0.28, "credit_score": 742.0}), nil)
 	if !errors.As(err, &pv) {
 		t.Fatalf("expected loan-cap block, got %v", err)
