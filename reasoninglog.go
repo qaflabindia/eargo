@@ -1,6 +1,7 @@
 package ear
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,26 @@ import (
 	"sync"
 	"time"
 )
+
+// genesis is the chain's seed: the previous-hash the first record links
+// against, so a trail with even one record has a fixed, verifiable start.
+const genesis = "ear-genesis"
+
+// chainLink is one link of the tamper-evident chain: the SHA-256 of the
+// previous link and this record's payload. Editing any byte of any record
+// breaks its own link and every link after it.
+func chainLink(previous, payload string) string {
+	sum := sha256.Sum256([]byte(previous + "\n" + payload))
+	return fmt.Sprintf("%x", sum[:])
+}
+
+// recordPayload is the stable bytes a record's chain links over: its JSON
+// with the chain field itself excluded, so verification can reproduce it.
+func recordPayload(r Record) string {
+	r.Chain = ""
+	b, _ := json.Marshal(r)
+	return string(b)
+}
 
 // ReasoningLog is the audit trail of every reasoning step -- policy
 // judgments with their rationale, discovery, the deliberation with the full
@@ -20,11 +41,12 @@ import (
 // point Sink at an *os.File to persist it, or a bytes.Buffer to capture it.
 // The in-memory Cycles always accumulate regardless of Sink.
 type ReasoningLog struct {
-	mu      sync.Mutex
-	Sink    io.Writer
-	Cycles  []TrailCycle
-	current *TrailCycle
-	enc     *json.Encoder
+	mu       sync.Mutex
+	Sink     io.Writer
+	Cycles   []TrailCycle
+	current  *TrailCycle
+	enc      *json.Encoder
+	chainTip string // tip of the tamper-evident hash chain
 }
 
 // TrailCycle is one reasoning cycle's ordered records, stamped with the moment it
@@ -43,6 +65,7 @@ type Record struct {
 	Output    string         `json:"output"`
 	Rationale string         `json:"rationale,omitempty"`
 	Model     string         `json:"model"`
+	Chain     string         `json:"chain,omitempty"` // tamper-evident hash-chain link
 }
 
 // BeginCycle opens a new cycle keyed to the intent and stamped now.
@@ -97,6 +120,13 @@ func (l *ReasoningLog) Record(r Record) {
 	if r.Time.IsZero() {
 		r.Time = time.Now()
 	}
+	// Link this record into the tamper-evident chain before it is stored or
+	// streamed, so the persisted trail carries its own proof.
+	if l.chainTip == "" {
+		l.chainTip = genesis
+	}
+	l.chainTip = chainLink(l.chainTip, recordPayload(r))
+	r.Chain = l.chainTip
 	l.current.Records = append(l.current.Records, r)
 	if l.Sink != nil {
 		if l.enc == nil {
@@ -138,6 +168,28 @@ func (l *ReasoningLog) Records() iter.Seq[Record] {
 			}
 		}
 	}
+}
+
+// Verify proves the in-memory trail unbroken, or names the first record
+// whose link fails to reproduce -- so any edit, insertion or deletion of a
+// record surfaces as the exact point the chain first breaks. Returns
+// (true, "<n> records verified") when intact.
+func (l *ReasoningLog) Verify() (bool, string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	tip := genesis
+	n := 0
+	for i := range l.Cycles {
+		for _, rec := range l.Cycles[i].Records {
+			n++
+			expected := chainLink(tip, recordPayload(rec))
+			if rec.Chain != expected {
+				return false, fmt.Sprintf("chain broken at record %d (stage %q)", n, rec.Stage)
+			}
+			tip = expected
+		}
+	}
+	return true, fmt.Sprintf("%d records verified", n)
 }
 
 // UsageReport renders the operational ledger from the trail: one row per
