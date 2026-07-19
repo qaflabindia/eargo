@@ -403,6 +403,15 @@ func applyMemoryStrategy(runtime *Runtime, memoryText string) {
 	if strategy.HistoryCapacity > 0 {
 		runtime.Memory.Capacity = strategy.HistoryCapacity
 	}
+	// A `## Budget` declared in memory.md wires the non-blocking alert
+	// monitor -- cap and thresholds both authored, nothing coded. A host
+	// that wants a callback sets runtime.Budget.OnAlert; alerts hit the
+	// trail regardless.
+	if strategy.Budget > 0 {
+		monitor := NewBudgetMonitor(strategy.Budget, nil, strategy.AlertThresholds...)
+		monitor.Log = runtime.ReasoningLog
+		runtime.Budget = monitor
+	}
 }
 
 // -- helpers ---------------------------------------------------------------

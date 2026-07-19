@@ -115,3 +115,34 @@ func TestBudgetAlertsDuringCyclesNonBlocking(t *testing.T) {
 		t.Errorf("budget records on trail = %d, want 3", budgetRecords)
 	}
 }
+
+func TestBudgetAuthoredInMarkdown(t *testing.T) {
+	s := StrategyFromMarkdown("# Memory\n\n## Budget\n\n" +
+		"The monthly budget is $500. Send progressive alerts at 25%, 50%, 75%, 90% and 100%.\n")
+	if s.Budget != 500 {
+		t.Errorf("Budget = %v, want 500", s.Budget)
+	}
+	want := []float64{0.25, 0.5, 0.75, 0.9, 1.0}
+	if len(s.AlertThresholds) != len(want) {
+		t.Fatalf("thresholds = %v, want %v", s.AlertThresholds, want)
+	}
+	for i := range want {
+		if s.AlertThresholds[i] != want[i] {
+			t.Errorf("threshold[%d] = %v, want %v", i, s.AlertThresholds[i], want[i])
+		}
+	}
+}
+
+func TestBudgetWiredFromMemoryMd(t *testing.T) {
+	rt := NewRuntime("R")
+	applyMemoryStrategy(rt, "## Budget\n\nThe budget is $1,000. Warn at 25% and 50%.\n")
+	if rt.Budget == nil {
+		t.Fatal("a declared budget should wire the monitor")
+	}
+	if rt.Budget.Budget != 1000 {
+		t.Errorf("cap = %v, want 1000", rt.Budget.Budget)
+	}
+	if len(rt.Budget.Thresholds) != 2 {
+		t.Errorf("thresholds = %v, want 2", rt.Budget.Thresholds)
+	}
+}

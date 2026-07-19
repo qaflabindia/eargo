@@ -96,7 +96,7 @@ binding a model lights up the ported signatures with no pipeline change.
 - ✅ Generics (`resolve[T]`)
 - ✅ JSONL sink + range-over-func record iterator
 - ✅ ScriptedLM deterministic test double (LLM path runs in CI, no network)
-- ✅ **Budget alerts** (net-new, not in Python) — non-blocking progressive dollar-threshold alerts (`BudgetMonitor`, `WithBudget`)
+- ✅ **Budget alerts** (net-new, not in Python) — non-blocking progressive dollar-threshold alerts; **cap + thresholds authored in `memory.md` `
 
 ## 6. Category B — whole modules not started
 

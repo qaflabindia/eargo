@@ -36,12 +36,17 @@ func WithAdaptEvery(every int) Option {
 	return func(r *Runtime) { r.AdaptEvery = every }
 }
 
-// WithBudget attaches a non-blocking dollar-budget monitor: as cumulative
-// spend crosses each threshold fraction (0.25 for 25%, 0.5 for 50%, ...),
+// WithBudget attaches a non-blocking dollar-budget monitor programmatically.
+// The authored path is a `## Budget` section in memory.md ("The budget is
+// $50. Alert at 25%, 50% and 90%."), read by LoadRuntime -- prefer that so
+// the cap and thresholds live in natural language, not code. This option is
+// the escape hatch for a hand-built runtime, and for supplying an onAlert
+// callback on top of an authored budget.
+//
+// As cumulative spend crosses each threshold fraction (0.25 for 25%, ...),
 // onAlert fires once, progressively, and the crossing is recorded on the
-// audit trail. It never stops the runtime -- alerts only. Requires a
-// declared `## Pricing` (via LoadRuntime or a set Strategy) for spend to be
-// costed; with no pricing the monitor simply never sees spend.
+// trail. It never stops the runtime. Requires a declared `## Pricing` for
+// spend to be costed.
 func WithBudget(budget float64, onAlert func(BudgetAlert), thresholds ...float64) Option {
 	return func(r *Runtime) {
 		m := NewBudgetMonitor(budget, onAlert, thresholds...)

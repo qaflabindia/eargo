@@ -2,6 +2,7 @@ package ear
 
 import (
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -42,6 +43,13 @@ type Strategy struct {
 	Pricing              string
 	InputRatePerMillion  *float64 // nil = undeclared
 	OutputRatePerMillion *float64
+
+	// Budget and the alert thresholds it is measured against, both authored
+	// in memory.md's `## Budget` section in plain English (e.g. "The budget
+	// is $50. Alert at 25%, 50% and 90%."). Budget is 0 when none is
+	// declared; the thresholds are fractions, sorted ascending.
+	Budget          float64
+	AlertThresholds []float64
 }
 
 // Dollars returns the declared cost of a token spend and whether pricing was
@@ -184,6 +192,8 @@ func StrategyFromMarkdown(text string) *Strategy {
 			s.readOntology(body)
 		case strings.Contains(heading, "audit"):
 			s.readAudit(prose)
+		case strings.Contains(heading, "budget") || strings.Contains(heading, "spend"):
+			s.readBudget(prose)
 		case strings.Contains(heading, "pricing") || strings.Contains(heading, "price") ||
 			strings.Contains(heading, "cost"):
 			s.readPricing(prose)
@@ -231,6 +241,36 @@ func (s *Strategy) readAudit(prose string) {
 			}
 		}
 	}
+}
+
+var (
+	dollarAmountRe = regexp.MustCompile(`\$\s?[0-9][0-9,]*(?:\.[0-9]+)?`)
+	percentRe      = regexp.MustCompile(`([0-9]+(?:\.[0-9]+)?)\s*%`)
+)
+
+// readBudget reads the spend cap and alert thresholds from prose, both
+// authored in plain English: "The monthly budget is $500. Send progressive
+// alerts at 25%, 50%, 75%, 90% and 100%." The first $ amount is the cap;
+// every N% becomes a fraction threshold. Nothing is hardcoded -- an author
+// who declares no percentages gets a monitor that tracks spend but has no
+// alert points, exactly as written.
+func (s *Strategy) readBudget(prose string) {
+	if m := dollarAmountRe.FindString(prose); m != "" {
+		cleaned := strings.NewReplacer("$", "", ",", "", " ", "").Replace(m)
+		if v, err := strconv.ParseFloat(cleaned, 64); err == nil {
+			s.Budget = v
+		}
+	}
+	seen := map[float64]bool{}
+	for _, m := range percentRe.FindAllStringSubmatch(prose, -1) {
+		if v, err := strconv.ParseFloat(m[1], 64); err == nil {
+			if f := v / 100; f > 0 && !seen[f] {
+				seen[f] = true
+				s.AlertThresholds = append(s.AlertThresholds, f)
+			}
+		}
+	}
+	sort.Float64s(s.AlertThresholds)
 }
 
 // readPricing reads token rates from prose. The reliable form is per
