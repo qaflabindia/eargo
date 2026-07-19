@@ -17,7 +17,7 @@ modules, ~21.5k lines). Update the marks as work lands.
 
 | Area | ✅ | 🟡 | 🟣 | 🔵 | ⬜ |
 | --- | --- | --- | --- | --- | --- |
-| Core data model & spine | 15 | 2 | 0 | 0 | 0 |
+| Core data model & spine | 16 | 1 | 0 | 0 | 0 |
 | Pipeline stages | 13 | 1 | 0 | 0 | 1 |
 | DSPy layer (engine/LM) | 5 | 1 | 0 | 0 | 0 |
 | Strategy / loader | 2 | 1 | 0 | 0 | 0 |
@@ -45,7 +45,7 @@ modules, ~21.5k lines). Update the marks as work lands.
 - ✅ `experience` — Experience aggregation
 - ✅ `adaptation` — deterministic most-common ✅; **LLM distill wired** via `AdaptationBank.Distiller` (`DistillInsight`, most-common fallback)
 - ✅ `adapter` — as `Runtime.adapt` + `AdaptEvery`
-- 🟡 `reasoning_log` — records + JSONL sink + iterator + retention + token accounting + **dollar costing + usage-report ledger + hash-chain/verify** ✅
+- ✅ `reasoning_log` — records + JSONL sink + iterator + retention + token accounting + **dollar costing + usage-report ledger + hash-chain/verify** ✅
 
 ## 2. Pipeline stages
 
