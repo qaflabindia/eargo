@@ -412,6 +412,14 @@ func applyMemoryStrategy(runtime *Runtime, memoryText string) {
 		monitor.Log = runtime.ReasoningLog
 		runtime.Budget = monitor
 	}
+	// A `## Model Selection` that names a model AND whose credential is
+	// present in the environment (or that names a local api_base) binds the
+	// model across every seam. Absent the credential, the runtime stays on
+	// its deterministic fallback -- the stack loads on a machine with no keys
+	// instead of crashing.
+	if client, ok := strategy.ModelClient(); ok {
+		attachLM(runtime, client)
+	}
 }
 
 // -- helpers ---------------------------------------------------------------

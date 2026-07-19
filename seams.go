@@ -114,21 +114,25 @@ func (j LMJudge) Judge(ctx context.Context, policy *Policy, context map[string]a
 // against lm. Equivalent to WithReasoner(NewLMReasoner(lm)) plus
 // WithPolicyJudge(NewLMJudge(lm)).
 func WithLM(lm LM) Option {
-	return func(r *Runtime) {
-		r.Reasoner = NewLMReasoner(lm)
-		r.PolicyJudge = NewLMJudge(lm)
-		r.LM = lm
-		// Compress overflowed memory with the model too. Uses a background
-		// context: compression is a rare overflow event, not part of the
-		// cancellable cycle path, and falls back to the digest on error.
-		r.Memory.Summarizer = func(history string) (string, error) {
-			out, err := SummarizeHistory.Run(context.Background(), lm, SummarizeIn{History: history})
-			return out.Summary, err
-		}
-		// Distill Experience into an adaptation insight with the model too.
-		r.Adaptations.Distiller = func(summary string) (string, error) {
-			out, err := DistillInsight.Run(context.Background(), lm, DistillIn{ExperienceSummary: summary})
-			return out.Insight, err
-		}
+	return func(r *Runtime) { attachLM(r, lm) }
+}
+
+// attachLM binds a model across every seam that uses one -- deliberation,
+// policy judging, memory compression and adaptation distillation -- so the
+// programmatic WithLM option and the memory.md-authored model selection wire
+// the model identically. Memory/adaptation use a background context:
+// compression and distillation are rare, off the cancellable cycle path, and
+// fall back to their deterministic paths on error.
+func attachLM(r *Runtime, lm LM) {
+	r.Reasoner = NewLMReasoner(lm)
+	r.PolicyJudge = NewLMJudge(lm)
+	r.LM = lm
+	r.Memory.Summarizer = func(history string) (string, error) {
+		out, err := SummarizeHistory.Run(context.Background(), lm, SummarizeIn{History: history})
+		return out.Summary, err
+	}
+	r.Adaptations.Distiller = func(summary string) (string, error) {
+		out, err := DistillInsight.Run(context.Background(), lm, DistillIn{ExperienceSummary: summary})
+		return out.Insight, err
 	}
 }

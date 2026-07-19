@@ -14,6 +14,9 @@ import (
 // deterministic spine end to end: parser, loader, scope wiring, the
 // pipeline, and the fallback-expression governor.
 func TestLoadExampleStack(t *testing.T) {
+	// The example's memory.md declares a model; force the deterministic path
+	// so the test is hermetic regardless of the ambient environment.
+	t.Setenv("ANTHROPIC_API_KEY", "")
 	dir := filepath.Join("..", "examples", "credit_risk_stack")
 	if _, err := os.Stat(filepath.Join(dir, "policy.md")); err != nil {
 		t.Skipf("example stack not present: %v", err)

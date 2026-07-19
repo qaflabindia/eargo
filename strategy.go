@@ -38,7 +38,18 @@ type Strategy struct {
 
 	Ontology Ontology
 
-	ModelSelection string // raw prose; no binding is built (no LM in this port)
+	// Model selection, authored in memory.md's `## Model Selection` section
+	// ("Reason with anthropic/claude-opus-4-8, reading the credential from
+	// ANTHROPIC_API_KEY, at a temperature of 0.2."). The provider, model id
+	// and params are parsed from prose; the API key is NEVER in markdown --
+	// only the env var that holds it is named. ModelClient builds the client.
+	ModelSelection  string // raw prose
+	Provider        string
+	Model           string // "provider/model"
+	APIKeyEnvVar    string
+	APIBase         string
+	Temperature     *float64
+	MaxOutputTokens int
 
 	Pricing              string
 	InputRatePerMillion  *float64 // nil = undeclared
@@ -206,7 +217,7 @@ func StrategyFromMarkdown(text string) *Strategy {
 		case strings.Contains(heading, "auxiliary") || strings.Contains(heading, "summar"):
 			// recognised; auxiliary model needs the LM
 		case strings.Contains(heading, "model"):
-			s.ModelSelection = prose
+			s.readModel(prose)
 		case strings.Contains(heading, "spawn") || strings.Contains(heading, "subagent") ||
 			strings.Contains(heading, "sub-agent") || strings.Contains(heading, "agent"):
 			s.readSubagents(prose)

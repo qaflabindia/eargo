@@ -76,8 +76,12 @@ transliteration of the Python dynamic API:
 - `lm.go` / `llm_client.go` — the `LM` interface, a `ScriptedLM` test double,
   and `HTTPClient` (Anthropic Messages + OpenAI-compatible, retries,
   cache-prefix, usage via `CallHistory`).
-- `seams.go` — `LMReasoner` + `LMJudge` implement the two seams; `WithLM(lm)`
-  wires both and binds `Runtime.LM` for accounting.
+- `seams.go` — `LMReasoner` + `LMJudge` implement the two seams; `attachLM`
+  binds a model across every seam (reason, judge, memory summarise, adaptation
+  distil). `WithLM(lm)` is the programmatic path; a `## Model Selection`
+  section in memory.md auto-binds at load (provider/model/params from prose,
+  API key from the *named* env var, deterministic fallback when the key is
+  absent) — so the model, like every other setting, is authored not coded.
 
 ### Layer 4 — Memory (`memory.go`)
 `Evidence` / `Memory` / `Experience` / `Adaptation` — the four separated

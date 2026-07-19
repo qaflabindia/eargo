@@ -19,7 +19,7 @@ modules, ~21.5k lines). Update the marks as work lands.
 | --- | --- | --- | --- | --- | --- |
 | Core data model & spine | 15 | 2 | 0 | 0 | 0 |
 | Pipeline stages | 13 | 1 | 0 | 0 | 1 |
-| DSPy layer (engine/LM) | 3 | 2 | 1 | 1 | 0 |
+| DSPy layer (engine/LM) | 4 | 2 | 1 | 0 | 0 |
 | Strategy / loader | 2 | 1 | 0 | 0 | 0 |
 | Go-idiom enhancements | 7 | 0 | 0 | 0 | 0 |
 | Category B (infra/AGI planes) | 1 | 0 | 0 | 1 | ~40 |
@@ -78,13 +78,13 @@ binding a model lights up the ported signatures with no pipeline change.
   (rank-skills); ~20 more Python signatures not yet ported
 - ✅ `llm` — `lm.go`+`llm_client.go`: LM interface, ScriptedLM, HTTPClient (Anthropic + OpenAI-compatible), retries, cache-prefix, usage/`CallHistory`
 - 🟣 `skill_selector` — `RankRelevantSkills` ported, not wired
-- 🔵 `model_binding` — reconceived as `Reasoner`/`PolicyJudge` seams + `Runtime.LM`; **memory.md auto-binding of a model not wired** (explicit `WithLM` only)
+- ✅ `model_binding` — reconceived as `Reasoner`/`PolicyJudge` seams + `Runtime.LM`; **memory.md `## Model Selection` auto-binds at load** (provider/model/params from prose, key from the named env var, deterministic fallback when absent); `WithLM` the programmatic path
 
 **Seam wiring status:** the composable `[]Stage` pipeline wires govern, discover, select, schedule, delegate, recall, reason, explain and audit to the model when one is bound. Still deterministic-only: progressive skill-selection (`RankRelevantSkills`).
 
 ## 4. Strategy / loader
 
-- 🟡 `strategy` — history capacity, audit retention, tools, ontology, subagent limits, discovery guidance ✅; **model binding / MCP / knowledge / sandbox / energy / evolution / toolsets / auxiliary model / cross-session ⬜ (recognised, inert)**
+- 🟡 `strategy` — history capacity, audit retention, tools, ontology, subagent limits, discovery guidance ✅; **model binding wired** (`## Model Selection` auto-binds at load, key from env); MCP / knowledge / sandbox / energy / evolution / toolsets / auxiliary model / cross-session ⬜ (recognised, inert)
 - ✅ `ontology` — as part of Strategy
 - ✅ `loader` — skills/personas/policies/workflows/contracts/processes/tenant/scopes + escalation + retries + strategy wiring
 
