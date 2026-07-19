@@ -12,12 +12,13 @@ type Cycle struct {
 	Intent   Intent
 	Approval *ApprovalVerdict
 
-	Candidates []*Process  // discover
-	Selected   []*Process  // select
-	Plan       []*Workflow // compose + schedule
-	Recalled   string      // recall
-	Decision   any         // reason
-	Evidence   *Evidence   // evidence
+	Candidates []*Process     // discover
+	Selected   []*Process     // select
+	Plan       []*Workflow    // compose + schedule
+	Recalled   string         // recall
+	Decision   any            // reason
+	Data       map[string]any // formalize: conformant contract deliverable fields
+	Evidence   *Evidence      // evidence
 }
 
 // Stage is one named, composable step of the cycle. The pipeline is a

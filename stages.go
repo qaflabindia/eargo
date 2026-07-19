@@ -245,8 +245,69 @@ type formalizeStage struct{}
 func (formalizeStage) Name() string { return "formalize" }
 
 func (formalizeStage) Run(c *Cycle) error {
-	c.Runtime.formalize(c.Plan)
+	r := c.Runtime
+	if r.LM == nil {
+		// No model to extract with: record the skip per contract rather than
+		// fabricating deliverable values.
+		r.formalize(c.Plan)
+		return nil
+	}
+	data := map[string]any{}
+	for _, w := range c.Plan {
+		if w.Contract == nil {
+			continue
+		}
+		conforms, rationale, extracted, err := extractAndJudge(c, w.Contract)
+		if err != nil {
+			return err
+		}
+		output := "conformant"
+		if !conforms {
+			output = "NONCONFORMING -- data withheld from the decision"
+		}
+		r.ReasoningLog.Record(Record{
+			Stage:     "contract",
+			Inputs:    map[string]any{"contract": w.Contract.Name, "fields": w.Contract.RenderFields(), "data": extracted},
+			Output:    output,
+			Rationale: rationale,
+			Model:     modelLabel(r),
+		})
+		if conforms {
+			for k, v := range extracted {
+				data[k] = v
+			}
+		}
+	}
+	if len(data) > 0 {
+		c.Data = data
+	}
 	return nil
+}
+
+// extractAndJudge fills a contract's fields from the decision and judges the
+// filling against the authored meanings, with one hinted retry -- the
+// Python package's _formalize loop.
+func extractAndJudge(c *Cycle, contract *Contract) (bool, string, map[string]any, error) {
+	lm := c.Runtime.LM
+	extracted, err := contract.Extract(c.Ctx, lm, c.Decision, c.Intent.Text, "")
+	if err != nil {
+		return false, "", nil, err
+	}
+	conforms, rationale, err := contract.JudgeWithModel(c.Ctx, lm, extracted)
+	if err != nil {
+		return false, "", nil, err
+	}
+	if !conforms {
+		extracted, err = contract.Extract(c.Ctx, lm, c.Decision, c.Intent.Text, rationale)
+		if err != nil {
+			return false, "", nil, err
+		}
+		conforms, rationale, err = contract.JudgeWithModel(c.Ctx, lm, extracted)
+		if err != nil {
+			return false, "", nil, err
+		}
+	}
+	return conforms, rationale, extracted, nil
 }
 
 // -- evidence ---------------------------------------------------------------
@@ -257,6 +318,9 @@ func (evidenceStage) Name() string { return "evidence" }
 
 func (evidenceStage) Run(c *Cycle) error {
 	c.Evidence = c.Runtime.buildEvidence(c.Intent, c.Plan, c.Recalled)
+	if len(c.Data) > 0 {
+		c.Evidence.Sources["data"] = c.Data
+	}
 	return nil
 }
 

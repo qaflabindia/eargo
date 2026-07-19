@@ -17,7 +17,7 @@ modules, ~21.5k lines). Update the marks as work lands.
 
 | Area | ✅ | 🟡 | 🟣 | 🔵 | ⬜ |
 | --- | --- | --- | --- | --- | --- |
-| Core data model & spine | 12 | 5 | 0 | 0 | 0 |
+| Core data model & spine | 13 | 4 | 0 | 0 | 0 |
 | Pipeline stages | 13 | 1 | 0 | 0 | 1 |
 | DSPy layer (engine/LM) | 3 | 2 | 1 | 1 | 0 |
 | Strategy / loader | 2 | 1 | 0 | 0 | 0 |
@@ -35,7 +35,7 @@ modules, ~21.5k lines). Update the marks as work lands.
 - 🟡 `workflow` — steps/policies/contract/RetryBudget ✅; `Pattern:`/`Routes:` parsed but **inert** (need Panel/Journey)
 - ✅ `process` — Process, workflow stacking
 - ✅ `tool` — Tool data model + describe
-- 🟡 `contract` — structural `Judge` + `_formalize` skip record ✅; **LLM field extraction + meaning-level conformance not wired**
+- ✅ `contract` — structural `Judge` + `_formalize` skip (no model) ✅; **LLM field extraction + `JudgeContractConformance` + hinted retry wired** (`contract.go`, formalize stage)
 - ✅ `policy` — fallback-expr + LLM judge + approval gates + approvers + escalation-days
 - ✅ `tenant` — Tenant, fiscal-year bounds
 - ✅ `section` — parser, Coerce/Normalize/Quote, `argumentBlocks`
@@ -72,15 +72,15 @@ binding a model lights up the ported signatures with no pipeline change.
 ## 3. DSPy layer (EAR's native structured prompting)
 
 - ✅ `judgment` — `judgment.go`: Field/Kind/Judgment, render, parse, Prediction, cache boundary
-- 🟡 `signatures` — 13 typed `Signature[In,Out]` ported; **9 wired**
+- 🟡 `signatures` — 13 typed `Signature[In,Out]` ported; **10 wired**
   (policy, reason, discover, select, schedule, delegate, recall, explain,
-  audit); **4 dormant** (rank-skills, contract-conformance, summarize,
+  audit, contract-conformance); **3 dormant** (rank-skills, summarize,
   distill); ~20 more Python signatures not yet ported
 - ✅ `llm` — `lm.go`+`llm_client.go`: LM interface, ScriptedLM, HTTPClient (Anthropic + OpenAI-compatible), retries, cache-prefix, usage/`CallHistory`
 - 🟣 `skill_selector` — `RankRelevantSkills` ported, not wired
 - 🔵 `model_binding` — reconceived as `Reasoner`/`PolicyJudge` seams + `Runtime.LM`; **memory.md auto-binding of a model not wired** (explicit `WithLM` only)
 
-**Seam wiring status:** the composable `[]Stage` pipeline wires govern, discover, select, schedule, delegate, recall, reason, explain and audit to the model when one is bound. Still deterministic-only: memory summarize / adaptation distill / progressive skill-selection / contract conformance.
+**Seam wiring status:** the composable `[]Stage` pipeline wires govern, discover, select, schedule, delegate, recall, reason, explain and audit to the model when one is bound. Still deterministic-only: memory summarize / adaptation distill / progressive skill-selection.
 
 ## 4. Strategy / loader
 
@@ -114,7 +114,7 @@ binding a model lights up the ported signatures with no pipeline change.
 ## Recommended next order
 
 1. ~~One `Stage` seam~~ ✅ **done** — the composable pipeline wires 9 of 13 signatures.
-2. **Contract extraction** — wire `contract.extract` + `JudgeContractConformance` into `formalize` (the one correctness-relevant gap).
+2. ~~Contract extraction~~ ✅ **done** — extract + `JudgeContractConformance` + hinted retry wired into the formalize stage; conformant data reaches the decision's evidence.
 3. **LLM memory/adaptation** — wire `SummarizeHistory` + `DistillInsight`.
 4. **Dollar costing** — parse `## Pricing`, multiply the now-tracked tokens.
 5. **Tooling** — `tool_binder` + the reasoner tool-use loop.
