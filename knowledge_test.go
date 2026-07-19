@@ -56,7 +56,10 @@ func TestLibrarianResearchRecords(t *testing.T) {
 func TestCycleAugmentsReasoningWithKnowledge(t *testing.T) {
 	k := &Knowledge{}
 	k.AddDocument("manual", "m.md", "## DTI\n\nThe DTI ratio must not exceed 0.43.\n")
-	lm := &ScriptedLM{Default: Reply("complies", "yes", "decision", "APPROVED", "explanation", "x", "assessment", "y")}
+	lm := &ScriptedLM{Default: Reply(
+		"complies", "yes", "decision", "APPROVED", "explanation", "x", "assessment", "y",
+		"relevant numbers", "- 1", "rationale", "the DTI passage applies", // librarian selects passage 1
+	)}
 	proc := &Process{Name: "Underwriting", Description: "Underwrite."}
 	proc.AddWorkflow((&Workflow{Name: "W"}).AddStep("Decide.", nil))
 	rt := NewRuntime("R", WithLM(lm))
@@ -87,5 +90,45 @@ func TestCycleAugmentsReasoningWithKnowledge(t *testing.T) {
 	cites, _ := captured.Sources["citations"].([]string)
 	if len(cites) == 0 || !strings.Contains(cites[0], "manual") {
 		t.Errorf("evidence citations = %v", captured.Sources["citations"])
+	}
+}
+
+func TestLibrarianLLMSelectsPassages(t *testing.T) {
+	k := &Knowledge{}
+	// Three passages, each matching the query equally -> BM25 keeps document
+	// order, so passage numbers are stable.
+	k.AddDocument("m", "m.md", "## A\n\nloan alpha rule.\n\n## B\n\nloan beta rule.\n\n## C\n\nloan gamma rule.\n")
+	lm := &ScriptedLM{Default: Reply("relevant numbers", "- 1\n- 3", "rationale", "A and C apply")}
+	rt := NewRuntime("R", WithLM(lm))
+	rt.Librarian = &Librarian{Knowledge: k}
+
+	research := rt.Librarian.Research(context.Background(), rt, NewIntent("loan rule", nil))
+	if research == nil || len(research.Passages) != 2 {
+		t.Fatalf("expected 2 model-selected passages, got %+v", research)
+	}
+	if !strings.Contains(research.Citations[0], "§ A") || !strings.Contains(research.Citations[1], "§ C") {
+		t.Errorf("selected the wrong passages: %v", research.Citations)
+	}
+}
+
+func TestKnowledgeGistIndex(t *testing.T) {
+	k := &Knowledge{}
+	k.AddDocument("m", "m.md", "## A\n\nDTI ceiling is 0.43.\n\n## B\n\nFraud signals list.\n")
+	if strings.Contains(k.Narrowing(), "gists") {
+		t.Fatal("no gists yet")
+	}
+	lm := &ScriptedLM{Default: Reply("gist", "debt-to-income limit and fraud clues in plain words")}
+	n, err := k.Index(context.Background(), lm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Errorf("gisted %d passages, want 2", n)
+	}
+	if !strings.Contains(k.Narrowing(), "gists") {
+		t.Error("narrowing should now report the gist index")
+	}
+	if k.Passages[0].Gist == "" {
+		t.Error("passage should carry its gist")
 	}
 }

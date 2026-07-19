@@ -177,6 +177,38 @@ var ExplainDecision = Signature[ExplainIn, ExplainOut]{
 		"evidentiary basis for it.",
 }
 
+// -- knowledge / retrieval --------------------------------------------------
+
+type SelectPassagesIn struct {
+	IntentText string `ear:"intent_text"`
+	Passages   string `ear:"passages,Numbered passages, each headed by its [source]"`
+}
+type SelectPassagesOut struct {
+	RelevantNumbers []string `ear:"relevant_numbers,The numbers of the relevant passages; empty if none apply"`
+	Rationale       string   `ear:"rationale,One sentence explaining the choice"`
+}
+
+// SelectRelevantPassages judges which narrowed passages to actually consult.
+var SelectRelevantPassages = Signature[SelectPassagesIn, SelectPassagesOut]{
+	Instruction: "From the numbered knowledge passages, choose the ones a careful analyst would actually " +
+		"consult for this intent. Choosing none is a valid judgment; never refer to a passage that is not in " +
+		"the list.",
+}
+
+type GistIn struct {
+	Passage string `ear:"passage,The passage, headed by its [source]"`
+}
+type GistOut struct {
+	Gist string `ear:"gist,One plain-English line covering the passage and its synonyms"`
+}
+
+// GistPassage writes a one-line retrieval gist for a passage.
+var GistPassage = Signature[GistIn, GistOut]{
+	Instruction: "Write a one-line gist of a reference passage for a retrieval index. Say what the passage " +
+		"covers in plain, everyday words -- including the synonyms a searcher might use for its key terms -- so " +
+		"a differently-phrased question still finds it. One line, no heading, no quotation.",
+}
+
 // -- tool use ---------------------------------------------------------------
 
 type ChooseToolIn struct {

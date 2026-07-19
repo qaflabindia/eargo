@@ -18,7 +18,7 @@ modules, ~21.5k lines). Update the marks as work lands.
 | Area | ✅ | 🟡 | 🟣 | 🔵 | ⬜ |
 | --- | --- | --- | --- | --- | --- |
 | Core data model & spine | 16 | 1 | 0 | 0 | 0 |
-| Pipeline stages | 14 | 0 | 0 | 0 | 1 |
+| Pipeline stages | 15 | 0 | 0 | 0 | 0 |
 | DSPy layer (engine/LM) | 5 | 1 | 0 | 0 | 0 |
 | Strategy / loader | 2 | 1 | 0 | 0 | 0 |
 | Go-idiom enhancements | 7 | 0 | 0 | 0 | 0 |
@@ -67,7 +67,7 @@ binding a model lights up the ported signatures with no pipeline change.
 - ✅ `learner` — observe into Experience
 - ✅ `validator` — empty-decision guard
 - ✅ `reasoner` — deterministic + `LMReasoner`/`ReasonAboutIntent` + progressive skill selection + **native tool-use loop** (`ChooseToolAction`, recovery discipline) ✅
-- 🟡 `librarian` — BM25 retrieval + RAG augmentation + citations wired (`librarian.go`); **LLM relevance judging (`SelectRelevantPassages`) pending** (slice 2)
+- ✅ `librarian` — BM25 retrieval + **LLM relevance judging** (`SelectRelevantPassages`) + RAG augmentation + citations, all wired
 
 ## 3. DSPy layer (EAR's native structured prompting)
 
@@ -106,7 +106,7 @@ binding a model lights up the ported signatures with no pipeline change.
 
 **Distributed / infra / persistence:** ⬜ `kernel` ⬜ `k8s` ⬜ `sandbox` ⬜ `store` ⬜ `session_store` ⬜ `run` ⬜ `mcp_client` ⬜ `mcp_server` ⬜ `mcp_command_centre`
 
-**Enterprise-AGI / governance / cognition planes:** ⬜ `enterprise` ⬜ `authority` ⬜ `compiler` ⬜ `journey` ⬜ `examiner` 🟡 `knowledge` ⬜ `knowledge_governance` ⬜ `evolution` ⬜ `evolution_loop` ⬜ `optimizer` ⬜ `acquirer` ⬜ `coder` ⬜ `epistemic` ⬜ `adversary` ⬜ `panel` ⬜ `goal` ⬜ `spawner` ✅ `tool_binder` ⬜ `tools_cli` ⬜ `identity` ⬜ `task` ⬜ `exchange` ⬜ `thrift` ⬜ `carbon` ⬜ `energy` ⬜ `hardware` ⬜ `caveman` ⬜ `router`
+**Enterprise-AGI / governance / cognition planes:** ⬜ `enterprise` ⬜ `authority` ⬜ `compiler` ⬜ `journey` ⬜ `examiner` ✅ `knowledge` ⬜ `knowledge_governance` ⬜ `evolution` ⬜ `evolution_loop` ⬜ `optimizer` ⬜ `acquirer` ⬜ `coder` ⬜ `epistemic` ⬜ `adversary` ⬜ `panel` ⬜ `goal` ⬜ `spawner` ✅ `tool_binder` ⬜ `tools_cli` ⬜ `identity` ⬜ `task` ⬜ `exchange` ⬜ `thrift` ⬜ `carbon` ⬜ `energy` ⬜ `hardware` ⬜ `caveman` ⬜ `router`
 
 **Reconceived / already covered:** 🔵 `parallel` → `parallelMap` · ✅ `approval` → `ApprovalVerdict`
 

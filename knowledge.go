@@ -1,6 +1,7 @@
 package ear
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"math"
@@ -188,6 +189,30 @@ func (k *Knowledge) Narrowing() string {
 		}
 	}
 	return "BM25 over passage text alone (no gist index)"
+}
+
+// Index fills the model-written gist of every passage that lacks one, so
+// differently-phrased questions still match (the gist's synonyms are scored
+// alongside the passage text). Returns how many passages were gisted. An LM
+// error stops indexing and returns what was done so far. Without persistence
+// this re-indexes each call, so callers invoke it explicitly rather than the
+// loader firing it on every load.
+func (k *Knowledge) Index(ctx context.Context, lm LM) (int, error) {
+	gisted := 0
+	for i := range k.Passages {
+		if k.Passages[i].Gist != "" {
+			continue
+		}
+		out, err := GistPassage.Run(ctx, lm, GistIn{Passage: k.Passages[i].Render()})
+		if err != nil {
+			return gisted, err
+		}
+		if gist := strings.TrimSpace(out.Gist); gist != "" {
+			k.Passages[i].Gist = gist
+			gisted++
+		}
+	}
+	return gisted, nil
 }
 
 func (k *Knowledge) head(limit int) []Passage {

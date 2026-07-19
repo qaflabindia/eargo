@@ -2,6 +2,8 @@ package ear
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -45,11 +47,22 @@ func (l *Librarian) Research(ctx context.Context, rt *Runtime, intent Intent) *R
 	if len(candidates) == 0 {
 		return nil
 	}
-	chosen := candidates
-	if len(chosen) > keep {
-		chosen = chosen[:keep]
+
+	var chosen []Passage
+	var rationale, model string
+	if rt.LM != nil {
+		// The model judges which of the narrowed candidates a careful analyst
+		// would consult -- choosing none is valid. It can only pick from the
+		// candidates, never invent a passage.
+		chosen, rationale = judgePassagesWithLM(ctx, rt.LM, intent, candidates)
+		model = "llm"
+	} else {
+		chosen = candidates
+		if len(chosen) > keep {
+			chosen = chosen[:keep]
+		}
+		rationale = "structural retrieval only (no model bound): best BM25 candidates included"
 	}
-	rationale := "structural retrieval only (no model bound): best BM25 candidates included"
 
 	research := &Research{
 		Passages:  chosen,
@@ -70,9 +83,45 @@ func (l *Librarian) Research(ctx context.Context, rt *Runtime, intent Intent) *R
 			},
 			Output:    output,
 			Rationale: rationale,
+			Model:     model,
 		})
 	}
 	return research
+}
+
+// judgePassagesWithLM asks the model which candidates to consult. On an
+// unusable answer or an LM error it falls back to the best three candidates
+// -- retrieval is informative, never a gate, so it must not fail the cycle.
+func judgePassagesWithLM(ctx context.Context, lm LM, intent Intent, candidates []Passage) ([]Passage, string) {
+	numbered := make([]string, len(candidates))
+	for i, p := range candidates {
+		numbered[i] = fmt.Sprintf("%d. %s", i+1, p.Render())
+	}
+	out, err := SelectRelevantPassages.Run(ctx, lm, SelectPassagesIn{
+		IntentText: intent.Text,
+		Passages:   strings.Join(numbered, "\n\n"),
+	})
+	if err != nil {
+		fallback := candidates
+		if len(fallback) > 3 {
+			fallback = fallback[:3]
+		}
+		return fallback, "retrieval judging failed; best BM25 candidates included"
+	}
+	var chosen []Passage
+	seen := map[int]bool{}
+	for _, num := range out.RelevantNumbers {
+		n, err := strconv.Atoi(strings.TrimSpace(num))
+		if err != nil {
+			continue
+		}
+		idx := n - 1
+		if idx >= 0 && idx < len(candidates) && !seen[idx] {
+			seen[idx] = true
+			chosen = append(chosen, candidates[idx])
+		}
+	}
+	return chosen, out.Rationale
 }
 
 func passageSources(passages []Passage) []string {
