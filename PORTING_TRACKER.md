@@ -17,7 +17,7 @@ modules, ~21.5k lines). Update the marks as work lands.
 
 | Area | ✅ | 🟡 | 🟣 | 🔵 | ⬜ |
 | --- | --- | --- | --- | --- | --- |
-| Core data model & spine | 14 | 3 | 0 | 0 | 0 |
+| Core data model & spine | 15 | 2 | 0 | 0 | 0 |
 | Pipeline stages | 13 | 1 | 0 | 0 | 1 |
 | DSPy layer (engine/LM) | 3 | 2 | 1 | 1 | 0 |
 | Strategy / loader | 2 | 1 | 0 | 0 | 0 |
@@ -43,7 +43,7 @@ modules, ~21.5k lines). Update the marks as work lands.
 - ✅ `evidence` — Evidence
 - ✅ `memory` — layers + context window ✅; **LLM summarizer wired** via `Memory.Summarizer` (`SummarizeHistory`, digest fallback)
 - ✅ `experience` — Experience aggregation
-- 🟡 `adaptation` — deterministic most-common ✅; **LLM distill dormant** (`DistillInsight`)
+- ✅ `adaptation` — deterministic most-common ✅; **LLM distill wired** via `AdaptationBank.Distiller` (`DistillInsight`, most-common fallback)
 - ✅ `adapter` — as `Runtime.adapt` + `AdaptEvery`
 - 🟡 `reasoning_log` — records + JSONL sink + iterator + retention + **token accounting** ✅; **usage-report markdown + dollar costing ⬜**
 
@@ -74,13 +74,13 @@ binding a model lights up the ported signatures with no pipeline change.
 - ✅ `judgment` — `judgment.go`: Field/Kind/Judgment, render, parse, Prediction, cache boundary
 - 🟡 `signatures` — 13 typed `Signature[In,Out]` ported; **10 wired**
   (policy, reason, discover, select, schedule, delegate, recall, explain,
-  audit, contract-conformance, summarize); **2 dormant** (rank-skills,
-  distill); ~20 more Python signatures not yet ported
+  audit, contract-conformance, summarize, distill); **1 dormant**
+  (rank-skills); ~20 more Python signatures not yet ported
 - ✅ `llm` — `lm.go`+`llm_client.go`: LM interface, ScriptedLM, HTTPClient (Anthropic + OpenAI-compatible), retries, cache-prefix, usage/`CallHistory`
 - 🟣 `skill_selector` — `RankRelevantSkills` ported, not wired
 - 🔵 `model_binding` — reconceived as `Reasoner`/`PolicyJudge` seams + `Runtime.LM`; **memory.md auto-binding of a model not wired** (explicit `WithLM` only)
 
-**Seam wiring status:** the composable `[]Stage` pipeline wires govern, discover, select, schedule, delegate, recall, reason, explain and audit to the model when one is bound. Still deterministic-only: adaptation distill / progressive skill-selection.
+**Seam wiring status:** the composable `[]Stage` pipeline wires govern, discover, select, schedule, delegate, recall, reason, explain and audit to the model when one is bound. Still deterministic-only: progressive skill-selection (`RankRelevantSkills`).
 
 ## 4. Strategy / loader
 
@@ -115,7 +115,7 @@ binding a model lights up the ported signatures with no pipeline change.
 
 1. ~~One `Stage` seam~~ ✅ **done** — the composable pipeline wires 9 of 13 signatures.
 2. ~~Contract extraction~~ ✅ **done** — extract + `JudgeContractConformance` + hinted retry wired into the formalize stage; conformant data reaches the decision's evidence.
-3. **LLM memory/adaptation** — wire `SummarizeHistory` + `DistillInsight`.
+3. ~~LLM memory/adaptation~~ ✅ **done** — `SummarizeHistory` + `DistillInsight` wired with digest/most-common fallbacks.
 4. **Dollar costing** — parse `## Pricing`, multiply the now-tracked tokens.
 5. **Tooling** — `tool_binder` + the reasoner tool-use loop.
 6. Then category-B planes as needed (knowledge/librarian, session_store, MCP, server).

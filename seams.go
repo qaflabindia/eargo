@@ -125,5 +125,10 @@ func WithLM(lm LM) Option {
 			out, err := SummarizeHistory.Run(context.Background(), lm, SummarizeIn{History: history})
 			return out.Summary, err
 		}
+		// Distill Experience into an adaptation insight with the model too.
+		r.Adaptations.Distiller = func(summary string) (string, error) {
+			out, err := DistillInsight.Run(context.Background(), lm, DistillIn{ExperienceSummary: summary})
+			return out.Insight, err
+		}
 	}
 }

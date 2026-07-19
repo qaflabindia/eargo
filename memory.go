@@ -232,6 +232,13 @@ type Adaptation struct {
 // AdaptationBank is the runtime's long-term, distilled memory.
 type AdaptationBank struct {
 	Impressions []*Adaptation
+
+	// Distiller, when set, turns an Experience summary into an insight with a
+	// model instead of reporting the most-frequent decision. On error or an
+	// empty result, LearnFrom falls back to that deterministic report. A
+	// plain func, so the bank stays decoupled from the LLM layer; WithLM
+	// wires it.
+	Distiller func(experienceSummary string) (string, error)
 }
 
 // NewAdaptationBank builds an empty bank.
@@ -263,23 +270,33 @@ func (b *AdaptationBank) RelevantTo(intentText string) []*Adaptation {
 	return out
 }
 
-// LearnFrom distills the current Experience into one new Adaptation using
-// the deterministic path: the most frequently repeated decision.
+// LearnFrom distills the current Experience into one new Adaptation -- a
+// model-written insight when a Distiller is set, the most-frequently-repeated
+// decision otherwise.
 func (b *AdaptationBank) LearnFrom(experience *Experience) *Adaptation {
 	if len(experience.DecisionCounts) == 0 {
 		return nil
 	}
-	decision, count := experience.MostCommonDecision()
-	if decision == "" && count == 0 {
-		return nil
+	insight := ""
+	if b.Distiller != nil {
+		if s, err := b.Distiller(experience.Summary()); err == nil && strings.TrimSpace(s) != "" {
+			insight = s
+		}
 	}
-	trimmed := decision
-	if len(trimmed) > 80 {
-		trimmed = trimmed[:80]
+	if insight == "" {
+		decision, count := experience.MostCommonDecision()
+		if decision == "" && count == 0 {
+			return nil
+		}
+		trimmed := decision
+		if len(trimmed) > 80 {
+			trimmed = trimmed[:80]
+		}
+		insight = fmt.Sprintf("Most frequent outcome: '%s' (%d/%d cycles)", trimmed, count, experience.Observations)
 	}
 	adaptation := &Adaptation{
 		Name:          fmt.Sprintf("Learned-%d", len(b.Impressions)+1),
-		Insight:       fmt.Sprintf("Most frequent outcome: '%s' (%d/%d cycles)", trimmed, count, experience.Observations),
+		Insight:       insight,
 		Confidence:    1.0,
 		EvidenceCount: experience.Observations,
 	}
