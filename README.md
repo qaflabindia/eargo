@@ -97,12 +97,46 @@ policy judging, contract field *extraction* and meaning-level conformance,
 LLM reasoning + the tool-use loop, memory/adaptation LLM summarisation, and
 token/dollar usage accounting.
 
-**Not yet ported** (the LLM-facing and infrastructure surfaces): the
-dependency-free HTTPS `LM` client and signatures, the HTTP servers and
+### The DSPy layer — native structured prompting (now ported)
+
+EAR refuses to depend on DSPy, LiteLLM or any provider SDK; it ships its own
+replacement, and this port carries it:
+
+- **`judgment.go`** — the engine. A `Judgment` is a declared reasoning task
+  (an instruction + typed input/output `Field`s). It renders a prompt whose
+  answer is markdown `## Heading` sections — the exact codec EAR already
+  parses — and reads the reply back into a typed `Prediction`
+  (`pred.Bool("complies")`, `pred.List("names")`, `pred.Map("args")`). A
+  missing field degrades to a safe zero value; kinds are text/str/bool/list/map;
+  a `CacheBoundary` input yields a provider-neutral cache prefix.
+- **`signatures.go`** — the catalogue of concrete Judgments
+  (`JudgePolicyCompliance`, `ReasonAboutIntent`, `DiscoverRelevantProcesses`,
+  `JudgeContractConformance`, …), faithful to the Python instructions.
+- **`lm.go` / `llm_client.go`** — the `LM` interface, a deterministic
+  `ScriptedLM` test double, and `HTTPClient`, a dependency-free client
+  (`net/http` + `encoding/json`) speaking Anthropic's Messages API and any
+  OpenAI-compatible endpoint, with retries and a cache-prefix hint.
+- **`seams.go`** — `LMReasoner` and `LMJudge` plug the engine into the
+  runtime's two seams. `NewRuntime(name, WithLM(client))` makes the runtime
+  reason and judge policies against the model; with no LM it stays on the
+  deterministic defaults.
+
+```go
+lm := ear.NewHTTPClient("anthropic", "claude-opus-4-8", "ANTHROPIC_API_KEY", "")
+rt := ear.NewRuntime("Credit Risk Runtime", ear.WithLM(lm))
+// policies with a plain-English Statement are now judged in natural language;
+// deliberation runs the ReasonAboutIntent signature.
+```
+
+The whole layer is tested end-to-end against `ScriptedLM` (no network), so
+the LLM path is exercised deterministically in CI.
+
+**Not yet ported** (infrastructure surfaces): the HTTP servers and
 dashboard, MCP client/server, the sandbox, Postgres/k8s backends, the
-optimizer/evolution/acquirer planes, and the knowledge/BM25 retriever.
-These sit on top of the spine and can be added incrementally; the spine is
-what the rest is built on.
+optimizer/evolution/acquirer planes, and the knowledge/BM25 retriever. The
+LLM-facing pipeline stages beyond the two runtime seams (discovery,
+selection, scheduling, delegation) have their signatures ported but are not
+yet wired to run against the model — the deterministic paths still apply.
 
 Every judgment stage that would call a live model in Python falls back here
 to the same deterministic behaviour the Python package uses with no model

@@ -225,3 +225,72 @@ func paragraphs(lines []string) string {
 }
 
 func isSpace(b byte) bool { return b == ' ' || b == '\t' }
+
+// argumentBlocks parses a tool call's / structured field's arguments in
+// either of two freely-mixed forms: a short scalar as a one-line bullet
+// (`- name: value`), or a value that needs more than one line as a label
+// followed by a `>`-quoted block (`name:` then `> ...` lines). Names are
+// kept verbatim (only trimmed), never folded, because a field name becomes a
+// keyword-like identifier. This backs the Judgment "map" output kind.
+func argumentBlocks(lines []string) map[string]string {
+	blocks := map[string]string{}
+	label := ""
+	var pending []string
+	commit := func() {
+		if label != "" {
+			blocks[label] = strings.Trim(strings.Join(pending, "\n"), "\n")
+		}
+		label, pending = "", nil
+	}
+	for _, line := range lines {
+		if m := bulletRe.FindStringSubmatch(line); m != nil {
+			commit()
+			name, value, ok := strings.Cut(m[1], ":")
+			if ok && strings.TrimSpace(name) != "" {
+				blocks[strings.TrimSpace(name)] = strings.TrimSpace(value)
+			}
+			continue
+		}
+		stripped := strings.TrimSpace(line)
+		if !strings.HasPrefix(stripped, ">") && isLabel(stripped) {
+			commit()
+			label = stripped[:len(stripped)-1]
+			continue
+		}
+		if label == "" {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(stripped, "> "):
+			pending = append(pending, stripped[2:])
+		case stripped == ">":
+			pending = append(pending, "")
+		default:
+			pending = append(pending, line)
+		}
+	}
+	commit()
+	return blocks
+}
+
+// isLabel reports whether a line is a short label ending in a bare colon,
+// e.g. "Decision:" or "Evidence basis:" -- never a sentence.
+func isLabel(stripped string) bool {
+	if !strings.HasSuffix(stripped, ":") || len(stripped) > 40 {
+		return false
+	}
+	head := stripped[:len(stripped)-1]
+	if head == "" || !isAlpha(rune(head[0])) {
+		return false
+	}
+	for _, ch := range head {
+		if !(isAlpha(ch) || (ch >= '0' && ch <= '9') || ch == ' ' || ch == '_' || ch == '-') {
+			return false
+		}
+	}
+	return true
+}
+
+func isAlpha(ch rune) bool {
+	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')
+}
