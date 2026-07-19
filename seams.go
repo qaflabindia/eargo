@@ -28,7 +28,27 @@ func (r LMReasoner) Reason(ctx context.Context, rt *Runtime, intent Intent, plan
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	capabilities := renderCapabilities(plan)
+	// Progressive skill selection: for a persona with more than one skill,
+	// rank its skills against the intent and stack only the relevant ones.
+	// Any miss (LM error, or an unusable answer) falls back to all skills --
+	// selection is a prompt optimisation, never a correctness gate.
+	filter := func(p *Persona) []*Skill {
+		if len(p.Skills) <= 1 {
+			return p.Skills
+		}
+		out, err := RankRelevantSkills.Run(ctx, r.LM, RankSkillsIn{
+			IntentText:      intent.Text,
+			AvailableSkills: skillCatalogue(p.Skills),
+		})
+		if err != nil {
+			return p.Skills
+		}
+		if selected := resolveSkills(out.RelevantSkillNames, p.Skills); len(selected) > 0 {
+			return selected
+		}
+		return p.Skills
+	}
+	capabilities := renderCapabilities(plan, filter)
 	if capabilities == "" {
 		capabilities = "none"
 	}

@@ -19,7 +19,7 @@ modules, ~21.5k lines). Update the marks as work lands.
 | --- | --- | --- | --- | --- | --- |
 | Core data model & spine | 15 | 2 | 0 | 0 | 0 |
 | Pipeline stages | 13 | 1 | 0 | 0 | 1 |
-| DSPy layer (engine/LM) | 4 | 2 | 1 | 0 | 0 |
+| DSPy layer (engine/LM) | 5 | 1 | 0 | 0 | 0 |
 | Strategy / loader | 2 | 1 | 0 | 0 | 0 |
 | Go-idiom enhancements | 7 | 0 | 0 | 0 | 0 |
 | Category B (infra/AGI planes) | 1 | 0 | 0 | 1 | ~40 |
@@ -66,21 +66,21 @@ binding a model lights up the ported signatures with no pipeline change.
 - ✅ `auditor` — audited flag ✅ + `AuditEvidence` wired
 - ✅ `learner` — observe into Experience
 - ✅ `validator` — empty-decision guard
-- 🟡 `reasoner` — deterministic + `LMReasoner`/`ReasonAboutIntent` ✅; **tool-use loop + progressive skill selection dormant**
+- 🟡 `reasoner` — deterministic + `LMReasoner`/`ReasonAboutIntent` + progressive skill selection ✅; **tool-use loop dormant** (needs `tool_binder`)
 - ⬜ `librarian` — needs `knowledge` (not ported)
 
 ## 3. DSPy layer (EAR's native structured prompting)
 
 - ✅ `judgment` — `judgment.go`: Field/Kind/Judgment, render, parse, Prediction, cache boundary
-- 🟡 `signatures` — 13 typed `Signature[In,Out]` ported; **10 wired**
+- ✅ `signatures` — 13 typed `Signature[In,Out]` ported, **all 13 wired**
   (policy, reason, discover, select, schedule, delegate, recall, explain,
-  audit, contract-conformance, summarize, distill); **1 dormant**
-  (rank-skills); ~20 more Python signatures not yet ported
+  audit, contract-conformance, summarize, distill, rank-skills); ~20 more
+  Python signatures not yet ported
 - ✅ `llm` — `lm.go`+`llm_client.go`: LM interface, ScriptedLM, HTTPClient (Anthropic + OpenAI-compatible), retries, cache-prefix, usage/`CallHistory`
-- 🟣 `skill_selector` — `RankRelevantSkills` ported, not wired
+- ✅ `skill_selector` — `RankRelevantSkills` wired: progressive per-persona skill selection in the LM reasoner (>1-skill guard, all-skills fallback)
 - ✅ `model_binding` — reconceived as `Reasoner`/`PolicyJudge` seams + `Runtime.LM`; **memory.md `## Model Selection` auto-binds at load** (provider/model/params from prose, key from the named env var, deterministic fallback when absent); `WithLM` the programmatic path
 
-**Seam wiring status:** the composable `[]Stage` pipeline wires govern, discover, select, schedule, delegate, recall, reason, explain and audit to the model when one is bound. Still deterministic-only: progressive skill-selection (`RankRelevantSkills`).
+**Seam wiring status:** all 13 ported signatures are wired — the composable `[]Stage` pipeline (govern, discover, select, schedule, delegate, recall, reason, explain, audit), contract extraction/conformance, memory summarise, adaptation distil, and progressive skill selection all run against the model when one is bound.
 
 ## 4. Strategy / loader
 

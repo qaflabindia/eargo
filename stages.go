@@ -414,6 +414,30 @@ func processCatalogue(processes []*Process) string {
 	return strings.Join(lines, "\n")
 }
 
+func skillCatalogue(skills []*Skill) string {
+	lines := make([]string, len(skills))
+	for i, s := range skills {
+		lines[i] = s.Name + ": " + s.Instruction()
+	}
+	return strings.Join(lines, "\n")
+}
+
+func resolveSkills(names []string, pool []*Skill) []*Skill {
+	byKey := map[string]*Skill{}
+	for _, s := range pool {
+		byKey[Normalize(s.Name)] = s
+	}
+	var found []*Skill
+	seen := map[*Skill]bool{}
+	for _, name := range names {
+		if s := byKey[Normalize(name)]; s != nil && !seen[s] {
+			seen[s] = true
+			found = append(found, s)
+		}
+	}
+	return found
+}
+
 func resolveProcesses(names []string, pool []*Process) []*Process {
 	byKey := map[string]*Process{}
 	for _, p := range pool {

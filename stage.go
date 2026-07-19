@@ -55,7 +55,7 @@ func (DefaultReasoner) Reason(ctx context.Context, r *Runtime, intent Intent, pl
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	capabilities := renderCapabilities(plan)
+	capabilities := renderCapabilities(plan, nil)
 	decision := defaultReasoning(r, intent, capabilities)
 	if r.ReasoningLog != nil {
 		r.ReasoningLog.Record(Record{

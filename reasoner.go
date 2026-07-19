@@ -47,7 +47,10 @@ func defaultReasoning(r *Runtime, intent Intent, capabilities string) string {
 // renderCapabilities flattens the scheduled plan (Workflows -> ordered Steps
 // delegated to Personas -> stacked Skill prompts) into a natural-language
 // block, in order. This is what makes the author's stacking matter.
-func renderCapabilities(plan []*Workflow) string {
+// filter, when non-nil, returns the subset of a persona's skills to stack
+// (progressive skill selection); nil stacks all of them, the deterministic
+// default.
+func renderCapabilities(plan []*Workflow, filter func(*Persona) []*Skill) string {
 	if len(plan) == 0 {
 		return ""
 	}
@@ -70,16 +73,16 @@ func renderCapabilities(plan []*Workflow) string {
 				delegate = " [delegated to Persona " + step.Persona.Name + "]"
 			}
 			writeLine(fmt.Sprintf("  Step %d: %s%s", number+1, step.Instruction, delegate))
-			renderPersona(step.Persona, writeLine, "      ", false)
+			renderPersona(step.Persona, writeLine, "      ", false, filter)
 		}
 		for _, p := range w.Personas {
-			renderPersona(p, writeLine, "  ", true)
+			renderPersona(p, writeLine, "  ", true, filter)
 		}
 	}
 	return b.String()
 }
 
-func renderPersona(persona *Persona, writeLine func(string), indent string, header bool) {
+func renderPersona(persona *Persona, writeLine func(string), indent string, header bool, filter func(*Persona) []*Skill) {
 	if persona == nil {
 		return
 	}
@@ -92,7 +95,11 @@ func renderPersona(persona *Persona, writeLine func(string), indent string, head
 	} else if persona.Instructions != "" {
 		writeLine(indent + "Persona " + persona.Name + ": " + persona.Instructions)
 	}
-	for _, skill := range persona.Skills {
+	skills := persona.Skills
+	if filter != nil {
+		skills = filter(persona)
+	}
+	for _, skill := range skills {
 		writeLine(indent + "  - Skill " + skill.Name + ": " + skill.Instruction())
 	}
 }
