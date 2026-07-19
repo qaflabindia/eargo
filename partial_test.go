@@ -135,8 +135,8 @@ func TestRetentionRotation(t *testing.T) {
 	log := &ReasoningLog{}
 	now := time.Now()
 	log.Cycles = append(log.Cycles,
-		Cycle{IntentText: "old", Started: now.Add(-100 * 24 * time.Hour)},
-		Cycle{IntentText: "recent", Started: now.Add(-1 * time.Hour)},
+		TrailCycle{IntentText: "old", Started: now.Add(-100 * 24 * time.Hour)},
+		TrailCycle{IntentText: "recent", Started: now.Add(-1 * time.Hour)},
 	)
 	removed := log.Rotate(90, now)
 	if removed != 1 {

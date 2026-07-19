@@ -21,14 +21,14 @@ import (
 type ReasoningLog struct {
 	mu      sync.Mutex
 	Sink    io.Writer
-	Cycles  []Cycle
-	current *Cycle
+	Cycles  []TrailCycle
+	current *TrailCycle
 	enc     *json.Encoder
 }
 
-// Cycle is one reasoning cycle's ordered records, stamped with the moment it
+// TrailCycle is one reasoning cycle's ordered records, stamped with the moment it
 // opened so retention can rotate whole expired cycles out of the trail.
-type Cycle struct {
+type TrailCycle struct {
 	IntentText string    `json:"intent"`
 	Started    time.Time `json:"started"`
 	Records    []Record  `json:"records"`
@@ -48,7 +48,7 @@ type Record struct {
 func (l *ReasoningLog) BeginCycle(intent Intent) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.Cycles = append(l.Cycles, Cycle{IntentText: intent.Text, Started: time.Now()})
+	l.Cycles = append(l.Cycles, TrailCycle{IntentText: intent.Text, Started: time.Now()})
 	l.current = &l.Cycles[len(l.Cycles)-1]
 }
 
@@ -87,7 +87,7 @@ func (l *ReasoningLog) Record(r Record) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.current == nil {
-		l.Cycles = append(l.Cycles, Cycle{})
+		l.Cycles = append(l.Cycles, TrailCycle{})
 		l.current = &l.Cycles[len(l.Cycles)-1]
 	}
 	if r.Model == "" {
@@ -108,7 +108,7 @@ func (l *ReasoningLog) Record(r Record) {
 }
 
 // LastCycle returns the most recent cycle, or nil.
-func (l *ReasoningLog) LastCycle() *Cycle {
+func (l *ReasoningLog) LastCycle() *TrailCycle {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if len(l.Cycles) == 0 {

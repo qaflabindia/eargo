@@ -2,6 +2,7 @@ package ear
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -86,9 +87,17 @@ func TestCycleAccountsModelUsage(t *testing.T) {
 			usage = rec.Output
 		}
 	}
-	// One policy judgment + one deliberation = 2 calls, 200 in / 40 out.
-	if !strings.Contains(usage, "2 model calls") || !strings.Contains(usage, "200+40 tokens") {
-		t.Errorf("usage accounting = %q", usage)
+	// The wired pipeline calls the model in several judged stages (govern,
+	// discover, reason, explain, audit); the usage record must match however
+	// many calls actually fired -- each metered at 100 in / 20 out.
+	n := len(lm.Calls())
+	if n < 2 {
+		t.Fatalf("expected the model-bound cycle to make several calls, got %d", n)
+	}
+	wantCalls := fmt.Sprintf("%d model calls", n)
+	wantTokens := fmt.Sprintf("%d+%d tokens", n*100, n*20)
+	if !strings.Contains(usage, wantCalls) || !strings.Contains(usage, wantTokens) {
+		t.Errorf("usage accounting = %q; want %q and %q", usage, wantCalls, wantTokens)
 	}
 }
 

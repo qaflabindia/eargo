@@ -30,24 +30,34 @@ concurrent governance**.
 `Tool`, `Contract`. Plain structs with markdown round-tripping. Identical in
 spirit to Python Layer 1.
 
-### Layer 2 — The cycle (`runtime.go` + `pipeline.go` + `stage.go` + `reasoner.go`)
-This is the biggest *architectural* divergence. Python models ~18 stages as
-~18 classes; Go collapses the **mechanical** stages into methods on
-`*Runtime` (`discover`, `selectProcesses`, `compose`, `schedule`, `recall`,
-`explain`, `audit`, `validate`, `adapt`) and elevates only the **two genuine
-seams** to interfaces:
+### Layer 2 — The composable cycle (`cycle.go` + `stages.go` + `runtime.go`)
+Python models ~18 stages as ~18 classes wired in a fixed `reason()`. Go makes
+the cycle a **composable data pipeline**: a `[]Stage` executed over one shared
+`*Cycle` value.
 
 ```go
-type Reasoner   interface { Reason(ctx, *Runtime, Intent, []*Workflow) (any, error) }
+type Stage interface { Name() string; Run(*Cycle) error }
+type Cycle struct { Ctx context.Context; Runtime *Runtime; Intent Intent
+                    Candidates []*Process; Plan []*Workflow; Decision any; ... }
+```
+
+`Runtime.Reason` is now a 6-line loop: `for _, s := range r.Pipeline { ctx
+check; s.Run(c) }`. The pipeline (`defaultPipeline()`) is *data* — govern →
+discover → select → compose → schedule → govern → delegate → recall → reason →
+formalize → evidence → explain → audit → memory — so a caller can reorder,
+insert, drop or swap stages. Each **judged** stage (discover, select,
+schedule, delegate, recall, explain, audit) branches deterministic-or-LLM on
+`Runtime.LM`, and the two headline seams stay interfaces:
+
+```go
+type Reasoner    interface { Reason(ctx, *Runtime, Intent, []*Workflow) (any, error) }
 type PolicyJudge interface { Judge(ctx, *Policy, map[string]any) (bool, string, error) }
 ```
 
-`Runtime.Reason(ctx, intent, approval)` runs the fixed sequence: govern (gate
-1) → discover → select → compose → schedule → govern (gate 2) → recall →
-reason → validate → formalize → explain → audit → remember → learn → adapt,
-checking `ctx` at each gate and closing accounting + retention in a `defer`.
-Defaults are `DeterministicJudge` and `DefaultReasoner`; swap via functional
-options.
+So binding a model (via `WithLM`) lights up 9 of the 13 signatures with no
+pipeline change; offline, the same pipeline runs the deterministic paths.
+`ctx` is checked before every stage; accounting + retention close in a
+`defer`.
 
 ### Layer 3 — The LLM subsystem (`signature.go`, `judgment.go`, `signatures.go`, `lm.go`, `llm_client.go`, `seams.go`)
 EAR's dependency-free DSPy replacement — redesigned around generics, not a
@@ -119,13 +129,15 @@ recognised but inert.
 ```
 Reason(ctx, intent, approval)
   ├─ defer: recordUsage(callsBefore) + applyRetention()
-  ├─ govern(ctx, runtime policies)   → parallelMap → enforce (block/park)
-  ├─ discover → select → compose → schedule       (deterministic methods)
-  ├─ govern(ctx, workflow policies)  → enforce
-  ├─ recall                                        (deterministic)
-  ├─ Reasoner.Reason(ctx, …)         → seam: DefaultReasoner | LMReasoner
-  ├─ validate → formalize(contracts) → buildEvidence → explain → audit
-  └─ Memory.Record → Experience.Observe → adapt
+  └─ for stage in Pipeline:  (ctx checked before each)
+       govern{Policy}       → parallelMap judge → enforce (block/park)
+       discover · select · compose · schedule    (judged: keyword | signature)
+       govern{Workflow}     → enforce
+       delegate · recall                          (judged: authored | signature)
+       reason               → seam: DefaultReasoner | LMReasoner
+       formalize · evidence · explain · audit     (judged: f-string | signature)
+       memory               → Record · Observe · adapt
+  → c.Decision
 ```
 
 ## What's absent (vs Python)
@@ -150,9 +162,9 @@ genuine improvements the Python edition lacks. The whole LLM path runs in CI
 against `ScriptedLM` with no network.
 
 **Tensions / gaps.**
-- **Only 2 of 13 signatures are wired** — discovery/selection/scheduling/
-  delegation/recall/audit/explain stay deterministic even with a model bound.
-  A single pluggable `Stage` seam would light them all up.
+- **9 of 13 signatures wired** via the composable pipeline; the remaining
+  four (progressive skill-selection, contract conformance, memory summarise,
+  adaptation distil) stay deterministic — each is a stage-local branch away.
 - **The audit spine lacks tamper-evidence** (no hash-chain/verify) — the one
   place the simplification weakens a security-relevant Python guarantee.
 - **`any`-typed decisions** carry through the cycle (as in Python), trading

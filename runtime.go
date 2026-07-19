@@ -77,6 +77,10 @@ type Runtime struct {
 	// for convenience.
 	Strategy *Strategy
 	Tools    []Tool
+
+	// Pipeline is the ordered list of stages Reason runs. It defaults to
+	// defaultPipeline(); replace or reorder it to customize the cycle.
+	Pipeline []Stage
 }
 
 // NewRuntime builds a Runtime with deterministic defaults for both seams and
@@ -93,6 +97,7 @@ func NewRuntime(name string, opts ...Option) *Runtime {
 		PolicyJudge:  DeterministicJudge{},
 		AdaptEvery:   5,
 	}
+	r.Pipeline = defaultPipeline()
 	for _, opt := range opts {
 		opt(r)
 	}
@@ -147,68 +152,18 @@ func (r *Runtime) Reason(ctx context.Context, intent Intent, approval *ApprovalV
 		r.applyRetention()
 	}()
 
-	// Governance gate 1: runtime-wide policies.
-	violations, err := r.govern(ctx, r.Policies, intent, approval)
-	if err != nil {
-		return nil, err
+	// Run the composable pipeline over one shared Cycle. Each stage checks
+	// ctx first, so a cancelled context aborts at the next stage boundary.
+	c := &Cycle{Ctx: ctx, Runtime: r, Intent: intent, Approval: approval}
+	for _, stage := range r.Pipeline {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if err := stage.Run(c); err != nil {
+			return nil, err
+		}
 	}
-	if err := r.enforce(violations, approval, "Policy"); err != nil {
-		return nil, err
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-
-	candidates := r.discover(intent)
-	selected := selectProcesses(candidates)
-	plan := compose(selected)
-	scheduled := schedule(plan)
-
-	// Governance gate 2: workflow-scoped policies, once the plan is known.
-	violations, err = r.govern(ctx, workflowPolicies(scheduled), intent, approval)
-	if err != nil {
-		return nil, err
-	}
-	if err := r.enforce(violations, approval, "Workflow policy"); err != nil {
-		return nil, err
-	}
-
-	recalled := r.recall()
-
-	decision, err = r.Reasoner.Reason(ctx, r, intent, scheduled)
-	if err != nil {
-		return nil, err
-	}
-	decision, err = validate(decision)
-	if err != nil {
-		return nil, err
-	}
-
-	// Honour the plan's Contracts. With no model bound there is nothing
-	// honest to extract, so the skip itself goes on the record rather than
-	// fabricated values.
-	r.formalize(scheduled)
-
-	evidence := r.buildEvidence(intent, scheduled, recalled)
-	explanation := explain(evidence, decision)
-	evidence.Sources["explanation"] = explanation
-	r.ReasoningLog.Record(Record{
-		Stage:  "explanation",
-		Inputs: map[string]any{"basis": evidence.Basis, "decision": fmt.Sprint(decision)},
-		Output: explanation,
-	})
-	audit(evidence)
-
-	entry := r.Memory.Record(intent.Text, decision, intent.Context, evidence)
-	r.Experience.ObserveEntry(entry)
-	if learned := r.adapt(); learned != nil {
-		r.ReasoningLog.Record(Record{
-			Stage:  "adaptation",
-			Inputs: map[string]any{"experience": r.Experience.Summary()},
-			Output: learned.Insight,
-		})
-	}
-	return decision, nil
+	return c.Decision, nil
 }
 
 // formalize honours each workflow Contract in the plan. This port binds no

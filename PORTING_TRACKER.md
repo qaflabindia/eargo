@@ -18,7 +18,7 @@ modules, ~21.5k lines). Update the marks as work lands.
 | Area | ✅ | 🟡 | 🟣 | 🔵 | ⬜ |
 | --- | --- | --- | --- | --- | --- |
 | Core data model & spine | 12 | 5 | 0 | 0 | 0 |
-| Pipeline stages | 8 | 7 | 0 | 0 | 1 |
+| Pipeline stages | 13 | 1 | 0 | 0 | 1 |
 | DSPy layer (engine/LM) | 3 | 2 | 1 | 1 | 0 |
 | Strategy / loader | 2 | 1 | 0 | 0 | 0 |
 | Go-idiom enhancements | 6 | 0 | 0 | 0 | 0 |
@@ -49,18 +49,21 @@ modules, ~21.5k lines). Update the marks as work lands.
 
 ## 2. Pipeline stages
 
-Collapsed from Python's one-object-per-stage into Runtime methods + two seams.
+A **composable `[]Stage` pipeline** over a shared `*Cycle` (see `cycle.go`,
+`stages.go`) — reorderable/insertable/removable, not a hardcoded straight
+line. Each judged stage branches deterministic-or-LLM on `Runtime.LM`, so
+binding a model lights up the ported signatures with no pipeline change.
 
 - ✅ `governor` — concurrent, seam-judged (`PolicyJudge`), fail-closed
-- 🟡 `discoverer` — keyword ✅; 🟣 `DiscoverRelevantProcesses` dormant
-- 🟡 `selector` — dedupe ✅; 🟣 `SelectProcesses` dormant
+- ✅ `discoverer` — keyword ✅ + `DiscoverRelevantProcesses` wired
+- ✅ `selector` — dedupe ✅ + `SelectProcesses` wired (>1 candidate)
 - ✅ `composer` — flatten
-- 🟡 `scheduler` — composition order ✅; 🟣 `ScheduleWorkflows` dormant
-- 🟡 `delegator` — authored-only ✅; 🟣 `DelegateSteps` dormant
-- ✅ `deliberator`/`decider`/`executor`/`performer`/`orchestrator`/`initializer` — collapsed into `Reason`
-- 🟡 `recaller` — full-window ✅; 🟣 `RecallRelevantMemory` dormant
-- 🟡 `explainer` — f-string ✅; 🟣 `ExplainDecision` dormant
-- 🟡 `auditor` — audited flag ✅; 🟣 `AuditEvidence` dormant
+- ✅ `scheduler` — composition order ✅ + `ScheduleWorkflows` wired (>1 workflow)
+- ✅ `delegator` — authored-only ✅ + `DelegateSteps` wired
+- ✅ `deliberator`/`decider`/`executor`/`performer`/`orchestrator`/`initializer` — collapsed into the pipeline
+- ✅ `recaller` — full-window ✅ + `RecallRelevantMemory` wired
+- ✅ `explainer` — f-string ✅ + `ExplainDecision` wired
+- ✅ `auditor` — audited flag ✅ + `AuditEvidence` wired
 - ✅ `learner` — observe into Experience
 - ✅ `validator` — empty-decision guard
 - 🟡 `reasoner` — deterministic + `LMReasoner`/`ReasonAboutIntent` ✅; **tool-use loop + progressive skill selection dormant**
@@ -69,12 +72,15 @@ Collapsed from Python's one-object-per-stage into Runtime methods + two seams.
 ## 3. DSPy layer (EAR's native structured prompting)
 
 - ✅ `judgment` — `judgment.go`: Field/Kind/Judgment, render, parse, Prediction, cache boundary
-- 🟡 `signatures` — 13 ported; **2 wired** (`JudgePolicyCompliance`, `ReasonAboutIntent`), **11 dormant**; ~20 more Python signatures not yet ported
+- 🟡 `signatures` — 13 typed `Signature[In,Out]` ported; **9 wired**
+  (policy, reason, discover, select, schedule, delegate, recall, explain,
+  audit); **4 dormant** (rank-skills, contract-conformance, summarize,
+  distill); ~20 more Python signatures not yet ported
 - ✅ `llm` — `lm.go`+`llm_client.go`: LM interface, ScriptedLM, HTTPClient (Anthropic + OpenAI-compatible), retries, cache-prefix, usage/`CallHistory`
 - 🟣 `skill_selector` — `RankRelevantSkills` ported, not wired
 - 🔵 `model_binding` — reconceived as `Reasoner`/`PolicyJudge` seams + `Runtime.LM`; **memory.md auto-binding of a model not wired** (explicit `WithLM` only)
 
-**Seam wiring status:** `Reasoner` ✅ · `PolicyJudge` ✅ · discovery/selection/scheduling/delegation/recall/audit/explain/summarize/distill ⬜ (no seam yet)
+**Seam wiring status:** the composable `[]Stage` pipeline wires govern, discover, select, schedule, delegate, recall, reason, explain and audit to the model when one is bound. Still deterministic-only: memory summarize / adaptation distill / progressive skill-selection / contract conformance.
 
 ## 4. Strategy / loader
 
@@ -107,11 +113,11 @@ Collapsed from Python's one-object-per-stage into Runtime methods + two seams.
 
 ## Recommended next order
 
-1. **One `Stage` seam** → lights up discovery, selection, scheduling, delegation, recall, audit, explain at once (11 dormant signatures → live).
+1. ~~One `Stage` seam~~ ✅ **done** — the composable pipeline wires 9 of 13 signatures.
 2. **Contract extraction** — wire `contract.extract` + `JudgeContractConformance` into `formalize` (the one correctness-relevant gap).
 3. **LLM memory/adaptation** — wire `SummarizeHistory` + `DistillInsight`.
 4. **Dollar costing** — parse `## Pricing`, multiply the now-tracked tokens.
 5. **Tooling** — `tool_binder` + the reasoner tool-use loop.
 6. Then category-B planes as needed (knowledge/librarian, session_store, MCP, server).
 
-_Last reviewed: port through commit `7a1414e` (token/usage accounting)._
+_Last reviewed: port through the composable `[]Stage` pipeline + typed generic signatures._
