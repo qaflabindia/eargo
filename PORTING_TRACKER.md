@@ -45,7 +45,7 @@ modules, ~21.5k lines). Update the marks as work lands.
 - ✅ `experience` — Experience aggregation
 - ✅ `adaptation` — deterministic most-common ✅; **LLM distill wired** via `AdaptationBank.Distiller` (`DistillInsight`, most-common fallback)
 - ✅ `adapter` — as `Runtime.adapt` + `AdaptEvery`
-- 🟡 `reasoning_log` — records + JSONL sink + iterator + retention + token accounting + **dollar costing** ✅; **usage-report markdown ⬜** (+ hash-chain/verify ⬜)
+- 🟡 `reasoning_log` — records + JSONL sink + iterator + retention + token accounting + **dollar costing + usage-report ledger** ✅; **hash-chain/verify ⬜**
 
 ## 2. Pipeline stages
 
@@ -100,7 +100,7 @@ binding a model lights up the ported signatures with no pipeline change.
 
 ## 6. Category B — whole modules not started
 
-**Accounting/reporting:** ✅ dollar costing (tokens × pricing) · ⬜ usage report ledger
+**Accounting/reporting:** ✅ dollar costing (tokens × pricing) · ✅ usage report ledger
 
 **Servers / UI / observability:** ⬜ `server` ⬜ `dashboard` ⬜ `monitor` ⬜ `web` ⬜ `mail`
 

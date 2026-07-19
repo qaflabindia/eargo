@@ -2,6 +2,7 @@ package ear
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"iter"
 	"strings"
@@ -137,6 +138,102 @@ func (l *ReasoningLog) Records() iter.Seq[Record] {
 			}
 		}
 	}
+}
+
+// UsageReport renders the operational ledger from the trail: one row per
+// cycle -- model calls, in+out tokens, dollar cost (when Pricing is declared)
+// and latency -- with a totals row. A markdown document, like every other
+// EAR artifact. Cost shows "—" for a cycle (or the total) that had no
+// declared pricing.
+func (l *ReasoningLog) UsageReport() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	var b strings.Builder
+	b.WriteString("# Usage Report\n\n")
+	b.WriteString("| Cycle | Model calls | In+Out tokens | Cost | Latency (ms) |\n")
+	b.WriteString("| --- | --- | --- | --- | --- |\n")
+
+	var totalCalls, totalIn, totalOut int
+	var totalLatency int64
+	var totalCost float64
+	priced := false
+	row := 0
+	for i := range l.Cycles {
+		rec, ok := usageRecord(l.Cycles[i].Records)
+		if !ok {
+			continue
+		}
+		row++
+		calls := anyInt(rec.Inputs["model_calls"])
+		in := anyInt(rec.Inputs["input_tokens"])
+		out := anyInt(rec.Inputs["output_tokens"])
+		latency := anyInt64(rec.Inputs["latency_ms"])
+		costCell := "—"
+		if c, has := rec.Inputs["cost"]; has {
+			cost := anyFloat(c)
+			costCell = fmt.Sprintf("$%.6f", cost)
+			totalCost += cost
+			priced = true
+		}
+		totalCalls += calls
+		totalIn += in
+		totalOut += out
+		totalLatency += latency
+		b.WriteString(fmt.Sprintf("| %d | %d | %d+%d | %s | %d |\n", row, calls, in, out, costCell, latency))
+	}
+	totalCostCell := "—"
+	if priced {
+		totalCostCell = fmt.Sprintf("$%.6f", totalCost)
+	}
+	b.WriteString(fmt.Sprintf("| **total** | **%d** | **%d+%d** | **%s** | **%d** |\n",
+		totalCalls, totalIn, totalOut, totalCostCell, totalLatency))
+	return b.String()
+}
+
+func usageRecord(records []Record) (Record, bool) {
+	for _, r := range records {
+		if r.Stage == "usage" {
+			return r, true
+		}
+	}
+	return Record{}, false
+}
+
+func anyInt(v any) int {
+	switch n := v.(type) {
+	case int:
+		return n
+	case int64:
+		return int(n)
+	case float64:
+		return int(n)
+	}
+	return 0
+}
+
+func anyInt64(v any) int64 {
+	switch n := v.(type) {
+	case int64:
+		return n
+	case int:
+		return int64(n)
+	case float64:
+		return int64(n)
+	}
+	return 0
+}
+
+func anyFloat(v any) float64 {
+	switch n := v.(type) {
+	case float64:
+		return n
+	case int:
+		return float64(n)
+	case int64:
+		return float64(n)
+	}
+	return 0
 }
 
 // Render renders the whole trail as readable markdown, one section per
