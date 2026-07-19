@@ -106,7 +106,7 @@ binding a model lights up the ported signatures with no pipeline change.
 
 **Distributed / infra / persistence:** ⬜ `kernel` ⬜ `k8s` ⬜ `sandbox` ⬜ `store` ⬜ `session_store` ⬜ `run` ⬜ `mcp_client` ⬜ `mcp_server` ⬜ `mcp_command_centre`
 
-**Enterprise-AGI / governance / cognition planes:** ⬜ `enterprise` ⬜ `authority` ⬜ `compiler` ⬜ `journey` ⬜ `examiner` ⬜ `knowledge` ⬜ `knowledge_governance` ⬜ `evolution` ⬜ `evolution_loop` ⬜ `optimizer` ⬜ `acquirer` ⬜ `coder` ⬜ `epistemic` ⬜ `adversary` ⬜ `panel` ⬜ `goal` ⬜ `spawner` ✅ `tool_binder` `tools_cli` ⬜ `identity` ⬜ `task` ⬜ `exchange` ⬜ `thrift` ⬜ `carbon` ⬜ `energy` ⬜ `hardware` ⬜ `caveman` ⬜ `router`
+**Enterprise-AGI / governance / cognition planes:** ⬜ `enterprise` ⬜ `authority` ⬜ `compiler` ⬜ `journey` ⬜ `examiner` ⬜ `knowledge` ⬜ `knowledge_governance` ⬜ `evolution` ⬜ `evolution_loop` ⬜ `optimizer` ⬜ `acquirer` ⬜ `coder` ⬜ `epistemic` ⬜ `adversary` ⬜ `panel` ⬜ `goal` ⬜ `spawner` ✅ `tool_binder` ⬜ `tools_cli` ⬜ `identity` ⬜ `task` ⬜ `exchange` ⬜ `thrift` ⬜ `carbon` ⬜ `energy` ⬜ `hardware` ⬜ `caveman` ⬜ `router`
 
 **Reconceived / already covered:** 🔵 `parallel` → `parallelMap` · ✅ `approval` → `ApprovalVerdict`
 
@@ -118,7 +118,7 @@ binding a model lights up the ported signatures with no pipeline change.
 2. ~~Contract extraction~~ ✅ **done** — extract + `JudgeContractConformance` + hinted retry wired into the formalize stage; conformant data reaches the decision's evidence.
 3. ~~LLM memory/adaptation~~ ✅ **done** — `SummarizeHistory` + `DistillInsight` wired with digest/most-common fallbacks.
 4. ~~Dollar costing~~ ✅ **done** — `## Pricing` parsed, `Strategy.Dollars`, `~$X` on the usage record; plus a non-blocking `BudgetMonitor`.
-5. **Tooling** — `tool_binder` + the reasoner tool-use loop.
+5. ~~Tooling~~ ✅ **done** — governed tool binder + native reasoner tool-use loop (slices 1-2).
 6. Then category-B planes as needed (knowledge/librarian, session_store, MCP, server).
 
 _Last reviewed: port through the composable `[]Stage` pipeline + typed generic signatures._
