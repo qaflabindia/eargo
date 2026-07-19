@@ -118,5 +118,12 @@ func WithLM(lm LM) Option {
 		r.Reasoner = NewLMReasoner(lm)
 		r.PolicyJudge = NewLMJudge(lm)
 		r.LM = lm
+		// Compress overflowed memory with the model too. Uses a background
+		// context: compression is a rare overflow event, not part of the
+		// cancellable cycle path, and falls back to the digest on error.
+		r.Memory.Summarizer = func(history string) (string, error) {
+			out, err := SummarizeHistory.Run(context.Background(), lm, SummarizeIn{History: history})
+			return out.Summary, err
+		}
 	}
 }

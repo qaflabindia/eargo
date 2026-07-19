@@ -58,6 +58,14 @@ type Memory struct {
 	Capacity   int
 	Working    []MemoryEntry
 	Compressed []string
+
+	// Summarizer, when set, compresses overflowed history with a model
+	// instead of the deterministic digest. It takes the rendered overflow and
+	// returns a summary; on error or an empty result, Compress falls back to
+	// the digest, so compression never depends on a model being present.
+	// Kept as a plain func so Memory stays decoupled from the LLM layer;
+	// WithLM wires it.
+	Summarizer func(history string) (string, error)
 }
 
 // NewMemory builds a Memory with the default capacity of 20.
@@ -83,7 +91,8 @@ func (m *Memory) Record(intentText string, decision any, context map[string]any,
 }
 
 // Compress rolls the oldest entries past keep out of working into one new
-// deterministic-digest summary string in compressed.
+// summary string in compressed -- model-written when a Summarizer is set,
+// the deterministic digest otherwise.
 func (m *Memory) Compress(keep int) string {
 	if len(m.Working) <= keep {
 		return ""
@@ -95,6 +104,23 @@ func (m *Memory) Compress(keep int) string {
 		cut := len(m.Working) - keep
 		overflow, m.Working = m.Working[:cut], m.Working[cut:]
 	}
+	summary := m.summarize(overflow)
+	m.Compressed = append(m.Compressed, summary)
+	return summary
+}
+
+// summarize produces the compression summary: the model's, if a Summarizer is
+// set and succeeds; the deterministic digest otherwise.
+func (m *Memory) summarize(overflow []MemoryEntry) string {
+	if m.Summarizer != nil {
+		rendered := make([]string, len(overflow))
+		for i, e := range overflow {
+			rendered[i] = e.Render()
+		}
+		if s, err := m.Summarizer(strings.Join(rendered, "\n")); err == nil && strings.TrimSpace(s) != "" {
+			return s
+		}
+	}
 	var decisions []string
 	for _, e := range overflow {
 		d := fmt.Sprint(e.Decision)
@@ -103,9 +129,7 @@ func (m *Memory) Compress(keep int) string {
 		}
 		decisions = append(decisions, d)
 	}
-	summary := fmt.Sprintf("%d earlier cycles (e.g. %s)", len(overflow), strings.Join(decisions, ", "))
-	m.Compressed = append(m.Compressed, summary)
-	return summary
+	return fmt.Sprintf("%d earlier cycles (e.g. %s)", len(overflow), strings.Join(decisions, ", "))
 }
 
 // ContextWindow renders compressed history plus recent working entries as
