@@ -54,3 +54,17 @@ func WithBudget(budget float64, onAlert func(BudgetAlert), thresholds ...float64
 		r.Budget = m
 	}
 }
+
+// WithSessionStore attaches a cross-session store and restores from it at
+// once, so a hand-built runtime resumes warm before its first cycle. The
+// authored path is a `## Cross-Session Data` section in memory.md ("Persist
+// the session to `state/session.md`."), read by LoadRuntime -- prefer that so
+// the location lives in natural language, not code. A missing or corrupt
+// store restores nothing and never blocks; every later cycle saves back.
+func WithSessionStore(path string) Option {
+	return func(r *Runtime) {
+		store := &SessionStore{Path: path}
+		store.Restore(r)
+		r.SessionStore = store
+	}
+}

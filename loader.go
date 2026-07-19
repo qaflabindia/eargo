@@ -113,6 +113,7 @@ func (l *loader) load(name string) (*Runtime, error) {
 	}
 	applyMemoryStrategy(runtime, l.read("memory"))
 	l.loadKnowledge(runtime)
+	l.loadSessionStore(runtime)
 	return runtime, nil
 }
 
@@ -410,6 +411,24 @@ func (l *loader) loadKnowledge(runtime *Runtime) {
 	if corpus.Len() > 0 {
 		runtime.Librarian = &Librarian{Knowledge: corpus}
 	}
+}
+
+// loadSessionStore wires the cross-session store declared in memory.md's
+// `## Cross-Session Data` section: it resolves the path against the stack
+// directory, restores the memory layers from it before the first cycle, and
+// leaves it on the runtime so every later cycle saves back. A missing or
+// corrupt store restores nothing and never blocks the load.
+func (l *loader) loadSessionStore(runtime *Runtime) {
+	if runtime.Strategy == nil || runtime.Strategy.CrossSessionPath == "" {
+		return
+	}
+	path := runtime.Strategy.CrossSessionPath
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(l.directory, path)
+	}
+	store := &SessionStore{Path: path}
+	store.Restore(runtime)
+	runtime.SessionStore = store
 }
 
 // applyMemoryStrategy parses memory.md into a Strategy and wires the

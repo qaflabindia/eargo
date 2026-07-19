@@ -11,10 +11,10 @@ import (
 // port parses the sections whose effect is deterministic -- context-history
 // capacity, audit-trail retention, declared tools, the working ontology,
 // subagent-spawning limits and skills-discovery guidance -- and captures the
-// model-selection prose. It also parses pricing, budget, model selection and
-// knowledge sources (all wired). The sections whose effect needs an unported
-// plane (MCP, sandbox, energy, evolution, toolsets, auxiliary model,
-// cross-session store) are recognised but left inert.
+// model-selection prose. It also parses pricing, budget, model selection,
+// knowledge sources and the cross-session store path (all wired). The
+// sections whose effect needs an unported plane (MCP, sandbox, energy,
+// evolution, toolsets, auxiliary model) are recognised but left inert.
 type Strategy struct {
 	Raw string
 
@@ -65,6 +65,13 @@ type Strategy struct {
 	// KnowledgeSources declared in memory.md's `## Knowledge` section (name:
 	// `path`); the loader reads and chunks them into a corpus.
 	KnowledgeSources []KnowledgeSource
+
+	// CrossSessionPath is the file declared in memory.md's `## Cross-Session
+	// Data` section (e.g. "Persist the session to `state/session.md`."). The
+	// loader resolves it against the stack directory, restores from it before
+	// the first cycle, and saves back after every cycle. Empty when no
+	// persistence is declared -- the runtime then starts cold, as before.
+	CrossSessionPath string
 }
 
 // Dollars returns the declared cost of a token spend and whether pricing was
@@ -214,6 +221,8 @@ func StrategyFromMarkdown(text string) *Strategy {
 			s.readPricing(prose)
 		case strings.Contains(heading, "knowledge"):
 			s.readKnowledge(body)
+		case strings.Contains(heading, "cross session") || strings.Contains(heading, "persist"):
+			s.CrossSessionPath = declaredStorePath(prose)
 		case strings.Contains(heading, "discover"):
 			s.SkillsDiscovery = prose
 		case strings.Contains(heading, "toolset"):
@@ -417,6 +426,19 @@ func extractReach(description string) (string, string, string) {
 	cleaned = urlRe.ReplaceAllString(cleaned, "")
 	cleaned = trailReach.ReplaceAllString(strings.TrimSpace(cleaned), "")
 	return command, url, strings.Trim(cleaned, " ,;")
+}
+
+// declaredStorePath returns the session-store path authored in prose: a
+// backticked path if one is given (the natural way to write a file path), or
+// the first file-like token otherwise. Empty when none is named -- persistence
+// stays off rather than guessing a location.
+func declaredStorePath(prose string) string {
+	if m := backtickRe.FindStringSubmatch(prose); m != nil {
+		if path := strings.TrimSpace(m[1]); path != "" {
+			return path
+		}
+	}
+	return declaredPath(prose)
 }
 
 // declaredPath returns the first file-like path mentioned in prose, or "".

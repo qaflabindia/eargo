@@ -201,6 +201,60 @@ func Quote(text string) string {
 	return strings.Join(out, "\n")
 }
 
+// Unquote reassembles a blockquote written by Quote back into its original
+// text: the reading half of the `> ...` idiom.
+func Unquote(lines []string) string {
+	var recovered []string
+	for _, line := range lines {
+		stripped := strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(stripped, "> "):
+			recovered = append(recovered, stripped[2:])
+		case stripped == ">":
+			recovered = append(recovered, "")
+		}
+	}
+	return strings.Join(recovered, "\n")
+}
+
+// labelledBlocks collects `Label:` lines each followed by a blockquote into
+// label -> text -- the reading half of the `Label:` then `> ...` idiom Quote
+// writes (session entries, decision documents). Labels are normalized; a
+// label with no quote beneath it yields nothing. Unlike argumentBlocks, a
+// blank or unquoted line ends an open label, because this reads markdown EAR
+// itself wrote, where Quote always emits a bare `>` for a blank line.
+func labelledBlocks(lines []string) map[string]string {
+	blocks := map[string]string{}
+	label := ""
+	var pending []string
+	commit := func() {
+		if label != "" && len(pending) > 0 {
+			blocks[Normalize(label)] = Unquote(pending)
+		}
+		label, pending = "", nil
+	}
+	for _, line := range append(append([]string{}, lines...), "") {
+		stripped := strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(stripped, ">"):
+			if label != "" {
+				pending = append(pending, line)
+			}
+		case isLabel(stripped):
+			commit()
+			label = stripped[:len(stripped)-1]
+		case stripped != "":
+			commit()
+		default: // a blank line ends an open, filled label
+			if label != "" && len(pending) > 0 {
+				commit()
+			}
+		}
+	}
+	commit()
+	return blocks
+}
+
 // paragraphs joins wrapped lines back into paragraphs, preserving
 // blank-line paragraph breaks.
 func paragraphs(lines []string) string {

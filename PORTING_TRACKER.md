@@ -22,7 +22,7 @@ modules, ~21.5k lines). Update the marks as work lands.
 | DSPy layer (engine/LM) | 5 | 1 | 0 | 0 | 0 |
 | Strategy / loader | 2 | 1 | 0 | 0 | 0 |
 | Go-idiom enhancements | 7 | 0 | 0 | 0 | 0 |
-| Category B (infra/AGI planes) | 1 | 0 | 0 | 1 | ~40 |
+| Category B (infra/AGI planes) | 3 | 0 | 0 | 1 | ~39 |
 
 ---
 
@@ -84,7 +84,7 @@ binding a model lights up the ported signatures with no pipeline change.
 
 ## 4. Strategy / loader
 
-- 🟡 `strategy` — history capacity, audit retention, tools, ontology, subagent limits, discovery guidance ✅; **model binding wired** (`## Model Selection` auto-binds at load, key from env); MCP / knowledge / sandbox / energy / evolution / toolsets / auxiliary model / cross-session ⬜ (recognised, inert)
+- 🟡 `strategy` — history capacity, audit retention, tools, ontology, subagent limits, discovery guidance ✅; **model binding wired** (`## Model Selection` auto-binds at load, key from env); **cross-session store wired** (`## Cross-Session Data` path parsed, restore-before/save-after); MCP / sandbox / energy / evolution / toolsets / auxiliary model ⬜ (recognised, inert)
 - ✅ `ontology` — as part of Strategy
 - ✅ `loader` — skills/personas/policies/workflows/contracts/processes/tenant/scopes + escalation + retries + strategy wiring
 
@@ -104,7 +104,7 @@ binding a model lights up the ported signatures with no pipeline change.
 
 **Servers / UI / observability:** ⬜ `server` ⬜ `dashboard` ⬜ `monitor` ⬜ `web` ⬜ `mail`
 
-**Distributed / infra / persistence:** ⬜ `kernel` ⬜ `k8s` ⬜ `sandbox` ⬜ `store` ⬜ `session_store` ⬜ `run` ⬜ `mcp_client` ⬜ `mcp_server` ⬜ `mcp_command_centre`
+**Distributed / infra / persistence:** ⬜ `kernel` ⬜ `k8s` ⬜ `sandbox` ⬜ `store` ✅ `session_store` ⬜ `run` ⬜ `mcp_client` ⬜ `mcp_server` ⬜ `mcp_command_centre`
 
 **Enterprise-AGI / governance / cognition planes:** ⬜ `enterprise` ⬜ `authority` ⬜ `compiler` ⬜ `journey` ⬜ `examiner` ✅ `knowledge` ⬜ `knowledge_governance` ⬜ `evolution` ⬜ `evolution_loop` ⬜ `optimizer` ⬜ `acquirer` ⬜ `coder` ⬜ `epistemic` ⬜ `adversary` ⬜ `panel` ⬜ `goal` ⬜ `spawner` ✅ `tool_binder` ⬜ `tools_cli` ⬜ `identity` ⬜ `task` ⬜ `exchange` ⬜ `thrift` ⬜ `carbon` ⬜ `energy` ⬜ `hardware` ⬜ `caveman` ⬜ `router`
 
@@ -119,6 +119,7 @@ binding a model lights up the ported signatures with no pipeline change.
 3. ~~LLM memory/adaptation~~ ✅ **done** — `SummarizeHistory` + `DistillInsight` wired with digest/most-common fallbacks.
 4. ~~Dollar costing~~ ✅ **done** — `## Pricing` parsed, `Strategy.Dollars`, `~$X` on the usage record; plus a non-blocking `BudgetMonitor`.
 5. ~~Tooling~~ ✅ **done** — governed tool binder + native reasoner tool-use loop (slices 1-2).
-6. Then category-B planes as needed (knowledge/librarian, session_store, MCP, server).
+6. ~~Persistence~~ ✅ **done** — `SessionStore` (markdown + JSON codecs) with `## Cross-Session Data` authored path, restore-before-first-cycle + save-after-each-cycle wiring.
+7. Then category-B planes as needed (MCP, server, store catalogue backends).
 
 _Last reviewed: port through the composable `[]Stage` pipeline + typed generic signatures._

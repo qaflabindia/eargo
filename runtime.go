@@ -95,6 +95,12 @@ type Runtime struct {
 	// Librarian retrieves relevant Knowledge (RAG) when a `## Knowledge`
 	// corpus is declared in memory.md. Nil leaves the research stage a no-op.
 	Librarian *Librarian
+
+	// SessionStore, when set (via memory.md's `## Cross-Session Data` or
+	// WithSessionStore), persists the memory layers after every cycle so the
+	// next session resumes warm. A save failure is recorded, never fatal --
+	// persistence is a convenience, not a gate on the cycle's result.
+	SessionStore *SessionStore
 }
 
 // NewRuntime builds a Runtime with deterministic defaults for both seams and
@@ -165,6 +171,7 @@ func (r *Runtime) Reason(ctx context.Context, intent Intent, approval *ApprovalV
 	defer func() {
 		r.recordUsage(started, callsBefore)
 		r.applyRetention()
+		r.persist()
 	}()
 
 	// Run the composable pipeline over one shared Cycle. Each stage checks
@@ -281,6 +288,22 @@ func (r *Runtime) recordUsage(started time.Time, callsBefore int) {
 	// reads on the trail right after the spend that triggered it. Non-blocking.
 	if r.Budget != nil && priced && cost > 0 {
 		r.Budget.Add(cost)
+	}
+}
+
+// persist writes the memory layers to the session store after a cycle, when
+// one is configured. A failure is recorded on the trail but never fails the
+// cycle -- the decision is already made; persistence is a convenience.
+func (r *Runtime) persist() {
+	if r.SessionStore == nil {
+		return
+	}
+	if _, err := r.SessionStore.Save(r); err != nil {
+		r.ReasoningLog.Record(Record{
+			Stage:  "persist",
+			Inputs: map[string]any{"path": r.SessionStore.Path},
+			Output: "session not saved: " + err.Error(),
+		})
 	}
 }
 
