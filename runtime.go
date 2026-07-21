@@ -112,6 +112,19 @@ type Runtime struct {
 	// Nil leaves Runtime.Spawn permissive; the loader wires one from the
 	// strategy so an authored "up to 3 subagents" limit is enforced.
 	Spawner *Spawner
+
+	// trailFile is the loader-opened persisted trail (memory.md's
+	// `## Reasoning Audit Trail`), held so Close can release it.
+	trailFile *TrailFile
+}
+
+// Close releases resources the loader opened on the runtime's behalf --
+// today, the persisted audit trail file. Safe to call on a hand-built
+// runtime that opened nothing, and safe to call more than once.
+func (r *Runtime) Close() error {
+	trail := r.trailFile
+	r.trailFile = nil
+	return trail.Close()
 }
 
 // NewRuntime builds a Runtime with deterministic defaults for both seams and

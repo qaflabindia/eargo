@@ -31,22 +31,34 @@ func recordPayload(r Record) string {
 	return string(b)
 }
 
+// RecordWriter is the seam a persisted trail implements: it receives each
+// finished record as it is logged. TrailFile is the file-backed
+// implementation; anything else (an exporter to an external system) is a few
+// lines of the caller's own code, never a dependency of EAR's.
+type RecordWriter interface {
+	WriteRecord(Record) error
+}
+
 // ReasoningLog is the audit trail of every reasoning step -- policy
 // judgments with their rationale, discovery, the deliberation with the full
 // stacked prompt material, and the explanation -- so governance and
 // reasoning leave a reviewable record rather than a bare boolean.
 //
 // If Sink is set, each Record is also streamed to it as a JSON line
-// (JSONL), the same append-only trail the Python package flushes to disk;
-// point Sink at an *os.File to persist it, or a bytes.Buffer to capture it.
-// The in-memory Cycles always accumulate regardless of Sink.
+// (JSONL); point Sink at an *os.File to persist it, or a bytes.Buffer to
+// capture it. Trail, when set (the loader wires a TrailFile from memory.md's
+// `## Reasoning Audit Trail`), receives each record for the append-only
+// persisted trail. Both are best-effort: a write failure never breaks a
+// reasoning cycle, and the in-memory Cycles always accumulate regardless.
 type ReasoningLog struct {
 	mu       sync.Mutex
 	Sink     io.Writer
+	Trail    RecordWriter
 	Cycles   []TrailCycle
 	current  *TrailCycle
 	enc      *json.Encoder
 	chainTip string // tip of the tamper-evident hash chain
+	cycleNo  int    // current cycle number, monotonic across the log's life
 }
 
 // TrailCycle is one reasoning cycle's ordered records, stamped with the moment it
@@ -59,6 +71,7 @@ type TrailCycle struct {
 
 // Record is one logged reasoning step.
 type Record struct {
+	Cycle     int            `json:"cycle"`
 	Stage     string         `json:"stage"`
 	Time      time.Time      `json:"time"`
 	Inputs    map[string]any `json:"inputs,omitempty"`
@@ -68,12 +81,31 @@ type Record struct {
 	Chain     string         `json:"chain,omitempty"` // tamper-evident hash-chain link
 }
 
-// BeginCycle opens a new cycle keyed to the intent and stamped now.
-func (l *ReasoningLog) BeginCycle(intent Intent) {
+// SeedCycleNumbering continues cycle numbering from n, so a session resumed
+// against an existing trail file never repeats cycle numbers inside the same
+// audit trail. The loader calls this with the trail file's highest cycle.
+func (l *ReasoningLog) SeedCycleNumbering(n int) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if n > l.cycleNo {
+		l.cycleNo = n
+	}
+}
+
+// BeginCycle opens a new numbered cycle keyed to the intent and stamped now,
+// and records the intent itself as the cycle's first record -- so the
+// persisted trail carries what was asked, not just how it was handled.
+func (l *ReasoningLog) BeginCycle(intent Intent) {
+	l.mu.Lock()
+	l.cycleNo++
 	l.Cycles = append(l.Cycles, TrailCycle{IntentText: intent.Text, Started: time.Now()})
 	l.current = &l.Cycles[len(l.Cycles)-1]
+	l.mu.Unlock()
+	l.Record(Record{
+		Stage:  "intent",
+		Inputs: map[string]any{"context": intent.Context},
+		Output: intent.Text,
+	})
 }
 
 // Rotate drops whole cycles whose start is older than retentionDays measured
@@ -106,13 +138,18 @@ func (l *ReasoningLog) Rotate(retentionDays float64, now time.Time) int {
 }
 
 // Record appends one step to the current cycle (opening a headless cycle if
-// none is active, so records are never lost) and streams it to Sink.
+// none is active, so records are never lost), streams it to Sink and hands it
+// to the persisted Trail.
 func (l *ReasoningLog) Record(r Record) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.current == nil {
+		l.cycleNo++
 		l.Cycles = append(l.Cycles, TrailCycle{})
 		l.current = &l.Cycles[len(l.Cycles)-1]
+	}
+	if r.Cycle == 0 {
+		r.Cycle = l.cycleNo
 	}
 	if r.Model == "" {
 		r.Model = "deterministic-fallback"
@@ -135,6 +172,11 @@ func (l *ReasoningLog) Record(r Record) {
 		// Best-effort streaming: a sink write failure must never crash a
 		// reasoning cycle, and the record is retained in memory regardless.
 		_ = l.enc.Encode(r)
+	}
+	if l.Trail != nil {
+		// Equally best-effort; the TrailFile keeps its own chain over what it
+		// persists, continued across sessions.
+		_ = l.Trail.WriteRecord(r)
 	}
 }
 

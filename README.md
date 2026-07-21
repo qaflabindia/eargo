@@ -71,7 +71,8 @@ behaviour you get when no provider is configured:
 | Operating strategy from memory.md (history capacity, audit retention, tools, ontology, subagent limits, discovery guidance) | `strategy.go` | ✅ |
 | Functional options (`WithReasoner`, `WithPolicyJudge`, …) | `options.go` | ✅ |
 | Markdown stack loader (`LoadRuntime`, generic `resolve[T]`, escalation-days + retries parsing) | `loader.go` | ✅ |
-| CLI demo | `cmd/ear` | ✅ |
+| Persisted audit trail (`TrailFile`: md/JSONL codecs, cross-session hash chain, `VerifyTrail`, `ReadTrail`) | `trailfile.go` | ✅ |
+| CLI application (`run`/`repl`/`inspect`/`trail`/`usage`/`verify`/`demo`, governed exit codes) | `cmd/ear` | ✅ |
 
 ### Deterministic behaviours completed from the "partially ported" gaps
 
@@ -190,12 +191,31 @@ decision, err := rt.Reason(context.Background(), intent, nil)
 
 ## CLI
 
+`cmd/ear` is a complete application over the library, not a demo:
+
 ```sh
-go run ./cmd/ear                     # built-in demo stack
-go run ./cmd/ear ../examples/credit_risk_stack \
+go build -o ear ./cmd/ear
+
+./ear run ../examples/credit_risk_stack \
     "Underwrite a $20,000 consumer loan application" \
     loan_amount=20000 debt_to_income=0.28 credit_score=742
+./ear run <stack> "<intent>" [k=v ...] -approve -approver riya   # answer a parked gate
+./ear repl <stack>          # interactive session; memory persists across restarts
+./ear inspect <stack>       # how the markdown was assembled, before reasoning
+./ear trail <stack>         # the persisted reasoning trail, readable
+./ear usage <stack>         # the usage ledger from a persisted JSONL trail
+./ear verify <stack>        # prove the trail's hash chain unbroken
+./ear demo                  # zero-setup built-in stack
 ```
+
+Exit codes are governed outcomes, so scripts can branch without parsing
+prose: `0` decided, `1` blocked by policy (or a broken trail chain), `2`
+error, `3` parked for human approval.
+
+The trail declared in memory.md's `## Reasoning Audit Trail` persists to
+disk (markdown or JSONL by extension), hash-chained across sessions and
+tamper-evident: `ear verify` names the exact record where an altered trail
+first breaks.
 
 ## Test
 

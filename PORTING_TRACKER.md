@@ -22,7 +22,7 @@ modules, ~21.5k lines). Update the marks as work lands.
 | DSPy layer (engine/LM) | 5 | 1 | 0 | 0 | 0 |
 | Strategy / loader | 2 | 1 | 0 | 0 | 0 |
 | Go-idiom enhancements | 7 | 0 | 0 | 0 | 0 |
-| Category B (infra/AGI planes) | 4 | 0 | 0 | 1 | ~38 |
+| Category B (infra/AGI planes) | 5 | 0 | 0 | 1 | ~37 |
 
 ---
 
@@ -45,7 +45,7 @@ modules, ~21.5k lines). Update the marks as work lands.
 - ✅ `experience` — Experience aggregation
 - ✅ `adaptation` — deterministic most-common ✅; **LLM distill wired** via `AdaptationBank.Distiller` (`DistillInsight`, most-common fallback)
 - ✅ `adapter` — as `Runtime.adapt` + `AdaptEvery`
-- ✅ `reasoning_log` — records + JSONL sink + iterator + retention + token accounting + **dollar costing + usage-report ledger + hash-chain/verify** ✅
+- ✅ `reasoning_log` — records + JSONL sink + iterator + retention + token accounting + **dollar costing + usage-report ledger + hash-chain/verify** + **persisted `TrailFile`** (md/JSONL codec by extension, cycle numbering + chain resumed across sessions, `VerifyTrail` names the exact tampered record, `ReadTrail` lossless JSONL read-back) ✅
 
 ## 2. Pipeline stages
 
@@ -84,7 +84,7 @@ binding a model lights up the ported signatures with no pipeline change.
 
 ## 4. Strategy / loader
 
-- 🟡 `strategy` — history capacity, audit retention, tools, ontology, discovery guidance ✅; **model binding wired** (`## Model Selection` auto-binds at load, key from env); **auxiliary model wired** (`## Auxiliary Model` backs memory compression + adaptation distillation, same parse rule, own fields/env var); **cross-session store wired** (`## Cross-Session Data` path parsed, restore-before/save-after); **subagent spawning wired** (`## Subagent Spawning` enable/limit → `Spawner`); MCP / sandbox / energy / evolution / toolsets ⬜ (recognised, inert — deployment-only for a library target)
+- 🟡 `strategy` — history capacity, audit retention, tools, ontology, discovery guidance ✅; **audit path wired** (`## Reasoning Audit Trail` → persisted `TrailFile` at load); **model binding wired** (`## Model Selection` auto-binds at load, key from env); **auxiliary model wired** (`## Auxiliary Model` backs memory compression + adaptation distillation, same parse rule, own fields/env var); **cross-session store wired** (`## Cross-Session Data` path parsed, restore-before/save-after); **subagent spawning wired** (`## Subagent Spawning` enable/limit → `Spawner`); MCP / sandbox / energy / evolution / toolsets ⬜ (recognised, inert — deployment-only for a library target)
 - ✅ `ontology` — as part of Strategy
 - ✅ `loader` — skills/personas/policies/workflows/contracts/processes/tenant/scopes + escalation + retries + strategy wiring
 
@@ -104,7 +104,7 @@ binding a model lights up the ported signatures with no pipeline change.
 
 **Servers / UI / observability:** ⬜ `server` ⬜ `dashboard` ⬜ `monitor` ⬜ `web` ⬜ `mail`
 
-**Distributed / infra / persistence:** ⬜ `kernel` ⬜ `k8s` ⬜ `sandbox` ⬜ `store` ✅ `session_store` ⬜ `run` ⬜ `mcp_client` ⬜ `mcp_server` ⬜ `mcp_command_centre`
+**Distributed / infra / persistence:** ⬜ `kernel` ⬜ `k8s` ⬜ `sandbox` ⬜ `store` ✅ `session_store` ✅ `run` (as the `ear` CLI: run/repl/inspect/trail/usage/verify, governed exit codes) ⬜ `mcp_client` ⬜ `mcp_server` ⬜ `mcp_command_centre`
 
 **Enterprise-AGI / governance / cognition planes:** ⬜ `enterprise` ⬜ `authority` ⬜ `compiler` ⬜ `journey` ⬜ `examiner` ✅ `knowledge` ⬜ `knowledge_governance` ⬜ `evolution` ⬜ `evolution_loop` ⬜ `optimizer` ⬜ `acquirer` ⬜ `coder` ⬜ `epistemic` ⬜ `adversary` ⬜ `panel` ⬜ `goal` ✅ `spawner` ✅ `tool_binder` ⬜ `tools_cli` ⬜ `identity` ⬜ `task` ⬜ `exchange` ⬜ `thrift` ⬜ `carbon` ⬜ `energy` ⬜ `hardware` ⬜ `caveman` ⬜ `router`
 

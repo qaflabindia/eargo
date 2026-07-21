@@ -114,6 +114,9 @@ func (l *loader) load(name string) (*Runtime, error) {
 	applyMemoryStrategy(runtime, l.read("memory"))
 	l.loadKnowledge(runtime)
 	l.loadSessionStore(runtime)
+	if err := l.loadAuditTrail(runtime); err != nil {
+		return nil, err
+	}
 	return runtime, nil
 }
 
@@ -429,6 +432,32 @@ func (l *loader) loadSessionStore(runtime *Runtime) {
 	store := &SessionStore{Path: path}
 	store.Restore(runtime)
 	runtime.SessionStore = store
+}
+
+// loadAuditTrail wires the persisted reasoning trail declared in memory.md's
+// `## Reasoning Audit Trail` section: the path (resolved against the stack
+// directory) opens as an append-only TrailFile whose hash chain and cycle
+// numbering continue from whatever the file already holds. An authored path
+// that cannot be opened fails the load -- a trail the author declared but the
+// runner silently can't write is a governance hole, not a default. No path
+// declared (or auditing written as disabled) leaves the trail in memory only.
+func (l *loader) loadAuditTrail(runtime *Runtime) error {
+	s := runtime.Strategy
+	if s == nil || !s.AuditEnabled || s.AuditPath == "" {
+		return nil
+	}
+	path := s.AuditPath
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(l.directory, path)
+	}
+	trail, err := OpenTrailFile(path)
+	if err != nil {
+		return fmt.Errorf("audit trail declared in memory.md: %w", err)
+	}
+	runtime.ReasoningLog.Trail = trail
+	runtime.ReasoningLog.SeedCycleNumbering(trail.MaxCycle())
+	runtime.trailFile = trail
+	return nil
 }
 
 // applyMemoryStrategy parses memory.md into a Strategy and wires the

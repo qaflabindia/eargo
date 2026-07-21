@@ -267,7 +267,7 @@ func (s *Strategy) readContextHistory(prose string) {
 func (s *Strategy) readAudit(prose string) {
 	s.AuditTrail = prose
 	s.AuditEnabled = !disabledRe.MatchString(prose)
-	s.AuditPath = declaredPath(prose)
+	s.AuditPath = declaredStorePath(prose)
 	// A retention window declared in a keep/retain/purge/rotate sentence.
 	for _, sentence := range strings.FieldsFunc(prose, func(r rune) bool { return r == '.' || r == ';' }) {
 		lowered := strings.ToLower(sentence)
@@ -455,9 +455,12 @@ func declaredStorePath(prose string) string {
 }
 
 // declaredPath returns the first file-like path mentioned in prose, or "".
+// Sentence punctuation is trimmed, but only from the right for dots -- a
+// dotfile path like `.ear/reasoning.md` keeps its leading dot.
 func declaredPath(prose string) string {
 	for _, w := range strings.Fields(prose) {
-		w = strings.Trim(w, "`.,;()")
+		w = strings.Trim(w, "`,;()")
+		w = strings.TrimRight(w, ".")
 		if strings.Contains(w, "/") || strings.HasSuffix(w, ".md") ||
 			strings.HasSuffix(w, ".jsonl") || strings.HasSuffix(w, ".json") ||
 			strings.HasSuffix(w, ".log") {
