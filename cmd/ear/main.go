@@ -11,6 +11,7 @@
 //	ear usage <stack-dir|trail-file>         the usage ledger from the persisted trail
 //	ear verify <stack-dir|trail-file>        prove the trail's hash chain unbroken
 //	ear kernel <stack-dir>...                run stacks as a persistent scheduled runtime
+//	ear serve <stack-dir>...                 run the control plane as an HTTP service
 //	ear demo                                 run the built-in demonstration stack
 //
 // Exit codes: 0 decided (or command succeeded), 1 blocked by policy (or a
@@ -59,6 +60,8 @@ func run(args []string) int {
 		return cmdVerify(rest)
 	case "kernel":
 		return cmdKernel(rest)
+	case "serve":
+		return cmdServe(rest)
 	case "demo":
 		return cmdDemo(rest)
 	case "help", "-h", "--help":
@@ -82,6 +85,7 @@ usage:
   ear usage <stack-dir|trail-file>         the usage ledger from the persisted trail
   ear verify <stack-dir|trail-file>        prove the trail's hash chain unbroken
   ear kernel <stack-dir>...                run stacks as a persistent scheduled runtime
+  ear serve <stack-dir>...                 run the control plane as an HTTP service
   ear demo                                 run the built-in demonstration stack
   ear help                                 this help
 
@@ -101,6 +105,13 @@ kernel flags:
   -once             arm and drain the due work once, then exit
   -status-every d   print a process-table snapshot on this period
   -json             machine output: one JSON object per dispatch
+
+serve flags:
+  -addr :8080       listen address
+  -stacks dir       directory stacks may be loaded from (required to create instances over the wire)
+  -subject name     act as this identity (requires -org)
+  -org a,b          the org ids that identity may act as
+  -workers N        how many different instances may run concurrently
 
 exit codes: 0 decided, 1 blocked by policy (or broken trail chain), 2 error, 3 parked for approval
 `)

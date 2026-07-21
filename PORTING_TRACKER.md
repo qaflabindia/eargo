@@ -22,7 +22,7 @@ modules, ~21.5k lines). Update the marks as work lands.
 | DSPy layer (engine/LM) | 5 | 1 | 0 | 0 | 0 |
 | Strategy / loader | 2 | 1 | 0 | 0 | 0 |
 | Go-idiom enhancements | 7 | 0 | 0 | 0 | 0 |
-| Category B (infra/AGI planes) | 10 | 0 | 0 | 1 | ~32 |
+| Category B (infra/AGI planes) | 11 | 0 | 0 | 1 | ~31 |
 
 ---
 
@@ -102,7 +102,7 @@ binding a model lights up the ported signatures with no pipeline change.
 
 **Accounting/reporting:** ✅ dollar costing (tokens × pricing) · ✅ usage report ledger
 
-**Servers / UI / observability:** ⬜ `server` ⬜ `dashboard` ⬜ `monitor` ⬜ `web` ⬜ `mail`
+**Servers / UI / observability:** ✅ `server` (HTTP control plane over the Kernel: bearer auth in constant time, stacks-root confinement, deployment-supplied claim, capped bodies, pure `Handle` routing, `ear serve`) ⬜ `dashboard` ⬜ `monitor` ⬜ `web` ⬜ `mail`
 
 **Distributed / infra / persistence:** ✅ `kernel` (process table + run queue + idle loop, fleet parallelism at one cycle per instance, dispatcher seam, `## Scheduled Work` authored in memory.md, `ear kernel` daemon) ⬜ `k8s` ⬜ `sandbox` ⬜ `store` ✅ `session_store` ✅ `run` (as the `ear` CLI: run/repl/inspect/trail/usage/verify/kernel, governed exit codes) ⬜ `mcp_client` ⬜ `mcp_server` ⬜ `mcp_command_centre`
 
@@ -121,10 +121,11 @@ binding a model lights up the ported signatures with no pipeline change.
 5. ~~Tooling~~ ✅ **done** — governed tool binder + native reasoner tool-use loop (slices 1-2).
 6. ~~Persistence~~ ✅ **done** — `SessionStore` (markdown + JSON codecs) with `## Cross-Session Data` authored path, restore-before-first-cycle + save-after-each-cycle wiring.
 7. ~~Kernel~~ ✅ **done** — the control plane: process table, run queue, idle loop, `## Scheduled Work` authored in memory.md, `identity.Claim` enforced at the cycle boundary, `ear kernel` running it persistently.
-8. **Next:** `server` — the Kernel reachable over the network, so the
-   enterprise orchestrates the persistent runtime without shell access.
-9. Then the remaining category-B planes as needed (MCP, `store` catalogue
-   backends, dashboard/monitor).
+8. ~~Server~~ ✅ **done** — the Kernel reachable over the network: instances
+   created, work submitted, gates approved and trails read over HTTP, with
+   auth, confinement and the tenant boundary all enforced at the door.
+9. Then the remaining category-B planes as needed (MCP client/server,
+   `store` catalogue backends, dashboard/monitor).
 
 **Verification.** The whole repo is verified on Go 1.26.5: `go build ./...`,
 `go vet ./...`, `gofmt -l .` all clean, `go test ./...` and `go test -race

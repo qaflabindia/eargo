@@ -206,6 +206,7 @@ go build -o ear ./cmd/ear
 ./ear usage <stack>         # the usage ledger from a persisted JSONL trail
 ./ear verify <stack>        # prove the trail's hash chain unbroken
 ./ear kernel <stack>...     # run stacks as a persistent scheduled runtime
+./ear serve <stack>...      # the same, behind an HTTP control plane
 ./ear demo                  # zero-setup built-in stack
 ```
 
@@ -279,6 +280,58 @@ one, and separate instances do genuinely overlap.
 `Kernel.Dispatcher` is an execution seam — set it and each firing runs
 wherever you send it (a remote executor, a job queue, a pod) while the
 Kernel stays the single scheduler.
+
+## The server: the control plane over the network
+
+`ear kernel` needs shell access on the box. `ear serve` is the same Kernel
+behind a small HTTP front door, so the enterprise can create instances,
+submit work and observe the fleet from anywhere.
+
+```sh
+EAR_SERVER_TOKEN=… ./ear serve -addr :8080 -stacks ./stacks
+
+GET    /health                        liveness, uptime, queue depth
+GET    /kernel                        the process table and recent dispatches
+GET    /instances                     what is registered
+POST   /instances                     load a stack as a named instance
+DELETE /instances/{name}              retire one
+POST   /instances/{name}/submit       reason an intent, governed
+POST   /instances/{name}/approve      release a parked approval gate
+GET    /instances/{name}/status       org, processes, last intent and decision
+GET    /instances/{name}/trail        recent records + hash-chain verification
+```
+
+**Solid by construction, not by afterthought.**
+
+- **Auth.** A bearer token from `EAR_SERVER_TOKEN`, never hardcoded, compared
+  in constant time. Every request is refused without it — including
+  `/health`, so an unauthenticated caller learns nothing. Unset leaves the
+  server open and it says so loudly on start: a development convenience you
+  opt into, never a silent default.
+- **Confinement.** Loading a stack is confined under `-stacks`; a path that
+  escapes it is refused, symlinks resolved on both sides first. With no
+  stacks root configured, loading from the wire is disabled outright — a
+  server that loads any path a caller names is a remote file-read primitive.
+- **The claim comes from the deployment, not the request.** A caller who can
+  name their own org has no boundary at all, so `-subject`/`-org` set the
+  identity all work runs under and a body that tries to assert one is
+  ignored. There is a test that asserts exactly this.
+- **Resilience.** Bodies are capped at 1 MiB, malformed JSON is a 400 rather
+  than a crash, and every handler is wrapped so one bad request can never
+  take the control plane down.
+- **Governance is not an HTTP error.** A blocked policy or a parked gate
+  returns `200` with `"outcome": "blocked"` or `"awaiting_approval"` and the
+  policies named. The request succeeded; governance said no. Reserving 4xx
+  for caller mistakes keeps the two genuinely distinguishable.
+- **Approval without a shared filesystem.** The `approval.md` file-drop
+  convention assumes the human and the runtime share a disk, which is untrue
+  across a network. `POST /instances/{name}/approve` is the same release
+  spoken over the wire, resubmitting the remembered intent with the verdict
+  attached.
+
+The routing is a pure function — `Handle(ctx, method, path, body) -> (status,
+payload)` — so the whole API is tested without opening a socket, and the
+socket layer holds no routing logic of its own.
 
 ## Test
 
