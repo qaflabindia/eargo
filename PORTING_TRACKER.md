@@ -21,8 +21,8 @@ modules, ~21.5k lines). Update the marks as work lands.
 | Pipeline stages | 15 | 0 | 0 | 0 | 0 |
 | DSPy layer (engine/LM) | 5 | 1 | 0 | 0 | 0 |
 | Strategy / loader | 2 | 1 | 0 | 0 | 0 |
-| Go-idiom enhancements | 7 | 0 | 0 | 0 | 0 |
-| Category B (infra/AGI planes) | 13 | 0 | 0 | 1 | ~29 |
+| Go-idiom enhancements | 8 | 0 | 0 | 0 | 0 |
+| Category B (infra/AGI planes) | 14 | 0 | 0 | 1 | ~28 |
 
 ---
 
@@ -93,7 +93,9 @@ binding a model lights up the ported signatures with no pipeline change.
 - ✅ `context.Context` threaded through the cycle (cancellation/deadlines)
 - ✅ Concurrent governance (`parallelMap`, order-preserving, bounded)
 - ✅ Functional options (`WithReasoner`/`WithPolicyJudge`/`WithLM`/`WithMemoryCapacity`/…)
-- ✅ Generics (`resolve[T]`)
+- ✅ Generics (`resolve[T]`; `Catalogue[T]` collapses the store's five
+  kind-specific classes into one type, with per-kind parsing supplied at
+  construction)
 - ✅ JSONL sink + range-over-func record iterator
 - ✅ ScriptedLM deterministic test double (LLM path runs in CI, no network)
 - ✅ **Budget alerts** (net-new, not in Python) — non-blocking progressive dollar-threshold alerts; **cap + thresholds authored in `memory.md` `
@@ -104,7 +106,7 @@ binding a model lights up the ported signatures with no pipeline change.
 
 **Servers / UI / observability:** ✅ `server` (HTTP control plane over the Kernel: bearer auth in constant time, stacks-root confinement, deployment-supplied claim, capped bodies, pure `Handle` routing, `ear serve`) ⬜ `dashboard` ⬜ `monitor` ⬜ `web` ⬜ `mail`
 
-**Distributed / infra / persistence:** ✅ `kernel` (process table + run queue + idle loop, fleet parallelism at one cycle per instance, dispatcher seam, `## Scheduled Work` authored in memory.md, `ear kernel` daemon) ⬜ `k8s` ⬜ `sandbox` ⬜ `store` ✅ `session_store` ✅ `run` (as the `ear` CLI: run/repl/inspect/trail/usage/verify/kernel, governed exit codes) ✅ `mcp_client` (JSON-RPC 2.0 over stdio, single-reader pump, handshake/list/call, tools bound into the governed tool loop) ✅ `mcp_server` (the `## MCP` declaration model, parsed and wired) ⬜ `mcp_command_centre` (needs the unported acc-skills enterprise plane)
+**Distributed / infra / persistence:** ✅ `kernel` (process table + run queue + idle loop, fleet parallelism at one cycle per instance, dispatcher seam, `## Scheduled Work` authored in memory.md, `ear kernel` daemon) ⬜ `k8s` ⬜ `sandbox` ✅ `store` (file-backed catalogue behind a `CatalogueBackend` interface, one generic `Catalogue[T]` for all five kinds, `OpenLibrary` + `Compose`; the optional Postgres/AGE backend is not ported — it needs a driver, and the zero-dependency default is the point) ✅ `session_store` ✅ `run` (as the `ear` CLI: run/repl/inspect/trail/usage/verify/kernel, governed exit codes) ✅ `mcp_client` (JSON-RPC 2.0 over stdio, single-reader pump, handshake/list/call, tools bound into the governed tool loop) ✅ `mcp_server` (the `## MCP` declaration model, parsed and wired) ⬜ `mcp_command_centre` (needs the unported acc-skills enterprise plane)
 
 **Enterprise-AGI / governance / cognition planes:** ⬜ `enterprise` ⬜ `authority` ⬜ `compiler` ⬜ `journey` ⬜ `examiner` ✅ `knowledge` ⬜ `knowledge_governance` ⬜ `evolution` ⬜ `evolution_loop` ⬜ `optimizer` ⬜ `acquirer` ⬜ `coder` ⬜ `epistemic` ⬜ `adversary` ✅ `panel` ⬜ `goal` ✅ `spawner` ✅ `tool_binder` ⬜ `tools_cli` ⬜ `exchange` ⬜ `thrift` ⬜ `carbon` ⬜ `energy` ⬜ `hardware` ⬜ `caveman` ⬜ `router` ✅ `identity` (Claim + tenant boundary, carried on `context.Context`) ✅ `task` (as `kernel.Task`)
 
@@ -127,9 +129,11 @@ binding a model lights up the ported signatures with no pipeline change.
 9. ~~MCP~~ ✅ **done** — `## MCP` declarations parsed, `McpClient` speaking
    JSON-RPC 2.0 over stdio, and `Runtime.ConnectMCP` binding a declared
    server's tools into the same governed tool loop as native tools.
-10. Then the remaining category-B planes as needed (`store` catalogue
-    backends, dashboard/monitor, `mcp_command_centre` once the enterprise
-    plane lands).
+10. ~~Store~~ ✅ **done** — a reusable library of named objects, one markdown
+    file each, composable into any number of stacks; tested to produce the
+    same governed outcomes as the stacked loader.
+11. Then the remaining category-B planes as needed (dashboard/monitor over
+    the server, `mcp_command_centre` once the enterprise plane lands).
 
 **Verification.** The whole repo is verified on Go 1.26.5: `go build ./...`,
 `go vet ./...`, `gofmt -l .` all clean, `go test ./...` and `go test -race

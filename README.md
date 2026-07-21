@@ -381,6 +381,57 @@ test binary re-executes itself as an MCP server — covering the handshake,
 listing, calling, tool-reported errors, timeouts, context cancellation,
 non-JSON noise on stdout, and launch failure.
 
+## The store: a library, not a stack
+
+`LoadRuntime` stacks *one directory* into *one* runtime — the authoring model
+for a single stack. A `Store` is the complementary shape: a reusable library,
+one named object per file, addressable by name and composable into as many
+stacks as the enterprise needs rather than copy-pasted into each.
+
+```
+library/
+  skills/risk-grade.md
+  policies/loan-amount-cap.md
+  personas/credit-risk-guru.md
+  workflows/underwriting.md
+  processes/underwrite-consumer-loan.md
+```
+
+```go
+library, err := ear.OpenLibrary("./library")
+retail, err := library.Compose("Retail Desk", "Underwrite Consumer Loan")
+broker, err := library.Compose("Broker Desk", "Underwrite Consumer Loan")
+```
+
+**Nothing here decides anything.** Like the loader, a store is structural: it
+does not judge, rank by relevance, or version. It is a filing cabinet, not a
+search engine.
+
+**A store file is just a one-section stacked-markdown document**, parsed
+through the loader's own per-kind parsing — so the catalogue cannot grow its
+own dialect. Cross-references between kinds resolve exactly as they do inside
+one file: load the referenced kind first, pass its catalogue in, which is why
+`OpenLibrary` reads skills, then policies, then personas, then workflows,
+then processes. A reference to something uncatalogued fails loudly, listing
+what *is* catalogued.
+
+**The slug is an address, not the name.** `Credit Risk Guru`,
+`credit-risk-guru` and `credit_risk_guru` all address
+`credit-risk-guru.md`, and `List` reports what each file's own heading says
+rather than its filename.
+
+One generic `Catalogue[T]` serves all five kinds, with the per-kind parsing
+and rendering supplied at construction — the same collapse the loader's
+`resolve[T]` makes for cross-references, where the Python package needs a
+class per kind. `CatalogueBackend` is an interface, so a database-backed
+catalogue swaps in as a constructor argument rather than a different code
+path. (Python's optional Postgres/AGE backend is deliberately not ported: it
+needs a driver, and the zero-dependency default is the point.)
+
+The decisive test is that a library and a stacked directory holding the same
+authored text reason to the same governed outcomes — if those ever diverge,
+the catalogue has drifted.
+
 ## Test
 
 ```sh
