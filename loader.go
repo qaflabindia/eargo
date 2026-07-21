@@ -48,14 +48,26 @@ var (
 	delegationPrefix = regexp.MustCompile(`(?i)^(?:delegated?\s+to|persona|by)\s*:?\s*`)
 )
 
-func (l *loader) read(kind string) string {
-	for _, filename := range fileCandidates[kind] {
-		path := filepath.Join(l.directory, filename)
+// source returns the text of the first candidate file that exists for kind,
+// the name of the file it came from, and whether any candidate was found.
+//
+// The found flag is what lets a caller tell "the author declared nothing"
+// from "the author declared something the parser could not read" -- the same
+// mistake, silently, has very different consequences depending on which file
+// it happened in.
+func (l *loader) source(kind string) (text, filename string, found bool) {
+	for _, candidate := range fileCandidates[kind] {
+		path := filepath.Join(l.directory, candidate)
 		if data, err := os.ReadFile(path); err == nil {
-			return string(data)
+			return string(data), candidate, true
 		}
 	}
-	return ""
+	return "", "", false
+}
+
+func (l *loader) read(kind string) string {
+	text, _, _ := l.source(kind)
+	return text
 }
 
 func (l *loader) parse(kind string) Document {
@@ -81,7 +93,8 @@ func (l *loader) load(name string) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
-	tenant, err := loadTenant(l.parse("tenant"))
+	tenantText, tenantFile, tenantFound := l.source("tenant")
+	tenant, err := loadTenant(ParseDocument(tenantText), tenantFile, tenantFound)
 	if err != nil {
 		return nil, err
 	}
@@ -333,9 +346,28 @@ func loadProcesses(doc Document, workflows map[string]*Workflow) ([]*Process, ma
 	return processes, referenced, nil
 }
 
-func loadTenant(doc Document) (Tenant, error) {
+// loadTenant reads the org boundary from tenant.md. found reports whether the
+// file existed at all, which is the whole difference between the two ways a
+// stack can end up with no declared tenant:
+//
+//   - No tenant.md: the documented off-unless-declared posture. The stack
+//     belongs to the default org, and that is a legitimate choice.
+//   - A tenant.md that parses to nothing: an authoring error. Falling back to
+//     the default here would quietly disable the very boundary the author was
+//     trying to declare -- Claim.Require is checked against Tenant.OrgID, so a
+//     dropped tenant.md means a claim scoped to another org is accepted (or
+//     the intended one refused) with no diagnostic anywhere. The commonest
+//     cause is a single '#' heading, which is a document title rather than a
+//     section, so the message says so.
+func loadTenant(doc Document, filename string, found bool) (Tenant, error) {
 	if len(doc.Sections) == 0 {
-		return NewTenant(), nil
+		if !found {
+			return NewTenant(), nil
+		}
+		return Tenant{}, fmt.Errorf(
+			"%s declares no tenant -- a tenant needs a '## Org Name' section with an "+
+				"'Org id:' field (note the two hashes: a single '#' is the document "+
+				"title, not a section)", filename)
 	}
 	section := doc.Sections[0]
 	body := section.StructuredBody("org id", "org", "fiscal year start", "fiscal year end", "timezone", "secret env var", "secret")

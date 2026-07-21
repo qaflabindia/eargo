@@ -149,3 +149,126 @@ func policyNamesOf(policies []*Policy) string {
 	}
 	return strings.Join(names, ", ")
 }
+
+// writeTenantStack lays down a minimal loadable stack, plus whatever tenant
+// file the case under test needs. A nil tenant map writes no tenant file at
+// all -- the "never declared one" case.
+func writeTenantStack(t *testing.T, tenantFiles map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	write := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("process.md", "# Desk\n\n## Handle\n\nHandle requests.\n\n- W\n\n## W\n\nDecide.\n")
+	write("workflow.md", "## W\n\n1. Decide.\n")
+	for name, body := range tenantFiles {
+		write(name, body)
+	}
+	return dir
+}
+
+func TestNoTenantFileIsTheDefaultOrg(t *testing.T) {
+	// The documented off-unless-declared posture: a stack that never declares
+	// a tenant belongs to the default org, and that is not an error.
+	rt, err := LoadRuntime(writeTenantStack(t, nil), "Desk")
+	if err != nil {
+		t.Fatalf("a stack with no tenant.md must load: %v", err)
+	}
+	if rt.Tenant.OrgID != DefaultOrgID {
+		t.Errorf("want the default org %q, got %q", DefaultOrgID, rt.Tenant.OrgID)
+	}
+}
+
+func TestDeclaredTenantIsParsed(t *testing.T) {
+	rt, err := LoadRuntime(writeTenantStack(t, map[string]string{
+		"tenant.md": "## Acme Corp\n\nOrg id: acme\nTimezone: Asia/Kolkata\n",
+	}), "Desk")
+	if err != nil {
+		t.Fatalf("LoadRuntime: %v", err)
+	}
+	if rt.Tenant.OrgID != "acme" {
+		t.Errorf("want org acme, got %q", rt.Tenant.OrgID)
+	}
+	if rt.Tenant.Name != "Acme Corp" {
+		t.Errorf("want name Acme Corp, got %q", rt.Tenant.Name)
+	}
+}
+
+func TestTenantFileThatParsesToNothingFailsLoudly(t *testing.T) {
+	// A single '#' is a document title, not a section, so this file parses to
+	// zero sections. Falling back to the default org here would silently
+	// disable a security boundary the author plainly meant to declare.
+	_, err := LoadRuntime(writeTenantStack(t, map[string]string{
+		"tenant.md": "# Tenant\n\nOrg ID: acme\n",
+	}), "Desk")
+	if err == nil {
+		t.Fatal("a tenant.md that declares nothing must not load silently")
+	}
+	// The message has to be actionable: which file, and what shape it needs.
+	for _, want := range []string{"tenant.md", "##", "Org id:"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q omits %q", err.Error(), want)
+		}
+	}
+}
+
+func TestEmptyTenantFileFailsLoudly(t *testing.T) {
+	_, err := LoadRuntime(writeTenantStack(t, map[string]string{"tenant.md": "\n\n"}), "Desk")
+	if err == nil {
+		t.Fatal("an empty tenant.md declares nothing and must not load silently")
+	}
+}
+
+func TestTenantErrorNamesTheFileItActuallyFound(t *testing.T) {
+	// org.md is the alternate candidate; the diagnostic must point at the file
+	// the author actually wrote, not the canonical name.
+	_, err := LoadRuntime(writeTenantStack(t, map[string]string{
+		"org.md": "# Org\n\nOrg id: acme\n",
+	}), "Desk")
+	if err == nil {
+		t.Fatal("an org.md that declares nothing must not load silently")
+	}
+	if !strings.Contains(err.Error(), "org.md") {
+		t.Errorf("error should name org.md, got %q", err.Error())
+	}
+}
+
+func TestTenantDeclaringNoOrgIDStillFailsLoudly(t *testing.T) {
+	// The pre-existing loud path, kept honest alongside the new one.
+	_, err := LoadRuntime(writeTenantStack(t, map[string]string{
+		"tenant.md": "## Acme Corp\n\nTimezone: Asia/Kolkata\n",
+	}), "Desk")
+	if err == nil {
+		t.Fatal("a tenant section with no 'Org id:' must fail")
+	}
+	if !strings.Contains(err.Error(), "Org id") {
+		t.Errorf("error should name the missing field, got %q", err.Error())
+	}
+}
+
+func TestDroppedTenantCannotSilentlyAdmitAForeignClaim(t *testing.T) {
+	// The consequence the loud failure exists to prevent. Before the fix this
+	// stack loaded on the default org, so a claim scoped to "default" -- an
+	// org the author never declared -- was admitted to acme's data.
+	_, err := LoadRuntime(writeTenantStack(t, map[string]string{
+		"tenant.md": "# Tenant\n\nOrg ID: acme\n",
+	}), "Desk")
+	if err == nil {
+		t.Fatal("the stack must refuse to load rather than run on a boundary nobody declared")
+	}
+
+	// Loaded correctly, the boundary does its job.
+	rt, err := LoadRuntime(writeTenantStack(t, map[string]string{
+		"tenant.md": "## Acme Corp\n\nOrg id: acme\n",
+	}), "Desk")
+	if err != nil {
+		t.Fatalf("LoadRuntime: %v", err)
+	}
+	foreign := WithClaim(context.Background(), Claim{Subject: "svc:intruder", OrgIDs: []string{DefaultOrgID}})
+	var boundary *TenantBoundaryError
+	if _, err := rt.Reason(foreign, NewIntent("Read the book.", nil), nil); !errors.As(err, &boundary) {
+		t.Fatalf("a claim for the default org must not reach acme's data, got %v", err)
+	}
+}
