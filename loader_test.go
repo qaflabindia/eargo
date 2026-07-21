@@ -9,22 +9,64 @@ import (
 	"testing"
 )
 
+// copyExampleStack copies the repository's example stack into a temp dir --
+// the stack declares persistence (trail, session), so reasoning through it
+// in place would mutate the repo fixture on every test run. Runtime state
+// (.ear and the like) is not copied; each test starts the stack cold.
+func copyExampleStack(t *testing.T) string {
+	t.Helper()
+	src := filepath.Join("..", "examples", "credit_risk_stack")
+	if _, err := os.Stat(filepath.Join(src, "policy.md")); err != nil {
+		t.Skipf("example stack not present: %v", err)
+	}
+	dst := t.TempDir()
+	err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		if rel == "." {
+			return nil
+		}
+		// Skip runtime state dirs; only the authored stack is the fixture.
+		if strings.HasPrefix(filepath.Base(path), ".") || strings.HasPrefix(rel, "ear") {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		target := filepath.Join(dst, rel)
+		if info.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, 0o644)
+	})
+	if err != nil {
+		t.Fatalf("copying the example stack: %v", err)
+	}
+	return dst
+}
+
 // TestLoadExampleStack loads the real credit_risk_stack markdown from the
-// repository and reasons two intents through it, exercising the whole
-// deterministic spine end to end: parser, loader, scope wiring, the
-// pipeline, and the fallback-expression governor.
+// repository (copied to a temp dir) and reasons two intents through it,
+// exercising the whole deterministic spine end to end: parser, loader, scope
+// wiring, the pipeline, and the fallback-expression governor.
 func TestLoadExampleStack(t *testing.T) {
 	// The example's memory.md declares a model; force the deterministic path
 	// so the test is hermetic regardless of the ambient environment.
 	t.Setenv("ANTHROPIC_API_KEY", "")
-	dir := filepath.Join("..", "examples", "credit_risk_stack")
-	if _, err := os.Stat(filepath.Join(dir, "policy.md")); err != nil {
-		t.Skipf("example stack not present: %v", err)
-	}
-	rt, err := LoadRuntime(dir, "")
+	rt, err := LoadRuntime(copyExampleStack(t), "")
 	if err != nil {
 		t.Fatalf("LoadRuntime error: %v", err)
 	}
+	defer rt.Close()
 
 	// Personas' skills stacked, processes discovered, policies wired.
 	if len(rt.Processes) == 0 {
@@ -70,14 +112,12 @@ func TestLoadExampleStack(t *testing.T) {
 // TestLoadResolvesSkillsAndDelegation confirms persona skills resolve by
 // name and workflow steps delegate to the persona named in parentheses.
 func TestLoadResolvesSkillsAndDelegation(t *testing.T) {
-	dir := filepath.Join("..", "examples", "credit_risk_stack")
-	if _, err := os.Stat(filepath.Join(dir, "workflow.md")); err != nil {
-		t.Skipf("example stack not present: %v", err)
-	}
-	rt, err := LoadRuntime(dir, "")
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	rt, err := LoadRuntime(copyExampleStack(t), "")
 	if err != nil {
 		t.Fatalf("LoadRuntime error: %v", err)
 	}
+	defer rt.Close()
 	var found bool
 	for _, p := range rt.Processes {
 		for _, w := range p.Workflows {
