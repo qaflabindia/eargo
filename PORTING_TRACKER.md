@@ -22,7 +22,7 @@ modules, ~21.5k lines). Update the marks as work lands.
 | DSPy layer (engine/LM) | 5 | 1 | 0 | 0 | 0 |
 | Strategy / loader | 2 | 1 | 0 | 0 | 0 |
 | Go-idiom enhancements | 7 | 0 | 0 | 0 | 0 |
-| Category B (infra/AGI planes) | 11 | 0 | 0 | 1 | ~31 |
+| Category B (infra/AGI planes) | 13 | 0 | 0 | 1 | ~29 |
 
 ---
 
@@ -84,7 +84,7 @@ binding a model lights up the ported signatures with no pipeline change.
 
 ## 4. Strategy / loader
 
-- 🟡 `strategy` — history capacity, audit retention, tools, ontology, discovery guidance ✅; **audit path wired** (`## Reasoning Audit Trail` → persisted `TrailFile` at load); **model binding wired** (`## Model Selection` auto-binds at load, key from env); **auxiliary model wired** (`## Auxiliary Model` backs memory compression + adaptation distillation, same parse rule, own fields/env var); **cross-session store wired** (`## Cross-Session Data` path parsed, restore-before/save-after); **subagent spawning wired** (`## Subagent Spawning` enable/limit → `Spawner`); MCP / sandbox / energy / evolution / toolsets ⬜ (recognised, inert — deployment-only for a library target)
+- 🟡 `strategy` — history capacity, audit retention, tools, ontology, discovery guidance ✅; **`## MCP` wired** (declared servers parsed; `ConnectMCP` refuses any name the stack did not declare); **audit path wired** (`## Reasoning Audit Trail` → persisted `TrailFile` at load); **model binding wired** (`## Model Selection` auto-binds at load, key from env); **auxiliary model wired** (`## Auxiliary Model` backs memory compression + adaptation distillation, same parse rule, own fields/env var); **cross-session store wired** (`## Cross-Session Data` path parsed, restore-before/save-after); **subagent spawning wired** (`## Subagent Spawning` enable/limit → `Spawner`); sandbox / energy / evolution / toolsets ⬜ (recognised, inert — deployment-only for a library target)
 - ✅ `ontology` — as part of Strategy
 - ✅ `loader` — skills/personas/policies/workflows/contracts/processes/tenant/scopes + escalation + retries + strategy wiring
 
@@ -104,7 +104,7 @@ binding a model lights up the ported signatures with no pipeline change.
 
 **Servers / UI / observability:** ✅ `server` (HTTP control plane over the Kernel: bearer auth in constant time, stacks-root confinement, deployment-supplied claim, capped bodies, pure `Handle` routing, `ear serve`) ⬜ `dashboard` ⬜ `monitor` ⬜ `web` ⬜ `mail`
 
-**Distributed / infra / persistence:** ✅ `kernel` (process table + run queue + idle loop, fleet parallelism at one cycle per instance, dispatcher seam, `## Scheduled Work` authored in memory.md, `ear kernel` daemon) ⬜ `k8s` ⬜ `sandbox` ⬜ `store` ✅ `session_store` ✅ `run` (as the `ear` CLI: run/repl/inspect/trail/usage/verify/kernel, governed exit codes) ⬜ `mcp_client` ⬜ `mcp_server` ⬜ `mcp_command_centre`
+**Distributed / infra / persistence:** ✅ `kernel` (process table + run queue + idle loop, fleet parallelism at one cycle per instance, dispatcher seam, `## Scheduled Work` authored in memory.md, `ear kernel` daemon) ⬜ `k8s` ⬜ `sandbox` ⬜ `store` ✅ `session_store` ✅ `run` (as the `ear` CLI: run/repl/inspect/trail/usage/verify/kernel, governed exit codes) ✅ `mcp_client` (JSON-RPC 2.0 over stdio, single-reader pump, handshake/list/call, tools bound into the governed tool loop) ✅ `mcp_server` (the `## MCP` declaration model, parsed and wired) ⬜ `mcp_command_centre` (needs the unported acc-skills enterprise plane)
 
 **Enterprise-AGI / governance / cognition planes:** ⬜ `enterprise` ⬜ `authority` ⬜ `compiler` ⬜ `journey` ⬜ `examiner` ✅ `knowledge` ⬜ `knowledge_governance` ⬜ `evolution` ⬜ `evolution_loop` ⬜ `optimizer` ⬜ `acquirer` ⬜ `coder` ⬜ `epistemic` ⬜ `adversary` ✅ `panel` ⬜ `goal` ✅ `spawner` ✅ `tool_binder` ⬜ `tools_cli` ⬜ `exchange` ⬜ `thrift` ⬜ `carbon` ⬜ `energy` ⬜ `hardware` ⬜ `caveman` ⬜ `router` ✅ `identity` (Claim + tenant boundary, carried on `context.Context`) ✅ `task` (as `kernel.Task`)
 
@@ -124,8 +124,12 @@ binding a model lights up the ported signatures with no pipeline change.
 8. ~~Server~~ ✅ **done** — the Kernel reachable over the network: instances
    created, work submitted, gates approved and trails read over HTTP, with
    auth, confinement and the tenant boundary all enforced at the door.
-9. Then the remaining category-B planes as needed (MCP client/server,
-   `store` catalogue backends, dashboard/monitor).
+9. ~~MCP~~ ✅ **done** — `## MCP` declarations parsed, `McpClient` speaking
+   JSON-RPC 2.0 over stdio, and `Runtime.ConnectMCP` binding a declared
+   server's tools into the same governed tool loop as native tools.
+10. Then the remaining category-B planes as needed (`store` catalogue
+    backends, dashboard/monitor, `mcp_command_centre` once the enterprise
+    plane lands).
 
 **Verification.** The whole repo is verified on Go 1.26.5: `go build ./...`,
 `go vet ./...`, `gofmt -l .` all clean, `go test ./...` and `go test -race

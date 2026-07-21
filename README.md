@@ -333,6 +333,54 @@ The routing is a pure function — `Handle(ctx, method, path, body) -> (status,
 payload)` — so the whole API is tested without opening a socket, and the
 socket layer holds no routing logic of its own.
 
+## MCP: reaching out to what the author declared
+
+MCP is an open JSON-RPC 2.0 protocol, and EAR speaks it directly — no SDK,
+standard library only, because the protocol *is* the spec and the spec is
+JSON over pipes.
+
+Servers are declared in memory.md, never in code:
+
+```markdown
+## MCP
+
+- credit_bureau: pulls credit reports and score history, via `bureau-mcp-server`
+- core_banking: reads account balances and repayment history, via `corebank-mcp-server`
+```
+
+```go
+client, err := runtime.ConnectMCP(ctx, "credit_bureau")
+defer client.Close()
+```
+
+**The declaration is the authorization.** `ConnectMCP` refuses a name the
+stack never declared, so connecting is the runtime reaching out to what the
+author already named — never a capability appearing from nowhere. It is the
+same discipline `BindTool` enforces for native tools, one level up: the
+author declares the *server*, and the server's own catalogue supplies the
+tools.
+
+**A connected server's tools are ordinary bound tools**, namespaced by
+server (`credit_bureau.lookup`) so two servers offering `search` never
+shadow each other. They run through `InvokeTool` like any native tool:
+judged by tool-scoped policies, recorded on the trail with arguments,
+result and duration, and counted against the tool-loop budget. A tool that
+reports failure returns to the model as text rather than crashing the cycle.
+
+**Exactly one goroutine ever reads a server's stdout** — the pump `Connect`
+starts, for the connection's lifetime. Each in-flight request registers a
+one-slot channel keyed by its JSON-RPC id; anything nobody is waiting for
+is dropped, since a response that outlived its caller's deadline is not an
+error. That single persistent reader is what makes a client-side timeout
+safe: nothing can spawn a second reader to race the pump and silently steal
+a line meant for a later call. A server that hangs, dies, or answers with
+malformed JSON fails as an `*McpError`, never silently.
+
+The client is tested against a real subprocess speaking real JSON-RPC — the
+test binary re-executes itself as an MCP server — covering the handshake,
+listing, calling, tool-reported errors, timeouts, context cancellation,
+non-JSON noise on stdout, and launch failure.
+
 ## Test
 
 ```sh

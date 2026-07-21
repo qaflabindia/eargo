@@ -87,6 +87,12 @@ type Strategy struct {
 	// persistence is declared -- the runtime then starts cold, as before.
 	CrossSessionPath string
 
+	// MCP is the raw prose of memory.md's `## MCP` section, and McpServers the
+	// servers declared in it. The declaration is what authorizes a connection:
+	// Runtime.ConnectMCP refuses a server the stack never named.
+	MCP        string
+	McpServers []McpServer
+
 	// Schedule is the raw prose of memory.md's `## Scheduled Work` section,
 	// and ScheduledWork the standing work parsed out of it -- the recurring
 	// intents a Kernel arms when it registers this stack as an instance. Empty
@@ -258,6 +264,8 @@ func StrategyFromMarkdown(text string) *Strategy {
 		case strings.Contains(heading, "pricing") || strings.Contains(heading, "price") ||
 			strings.Contains(heading, "cost"):
 			s.readPricing(prose)
+		case strings.Contains(heading, "mcp"):
+			s.readMCP(body)
 		case strings.Contains(heading, "schedul") || strings.Contains(heading, "standing work") ||
 			strings.Contains(heading, "recurring"):
 			s.readSchedule(body)
