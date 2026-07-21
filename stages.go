@@ -237,7 +237,16 @@ type reasonStage struct{}
 func (reasonStage) Name() string { return "reason" }
 
 func (reasonStage) Run(c *Cycle) error {
-	decision, err := c.Runtime.Reasoner.Reason(c.Ctx, c.Runtime, c.Intent, c.Plan, c.Research)
+	var decision any
+	var err error
+	// A scheduled workflow with an authored `Pattern:` convenes its personas
+	// as a panel instead of reasoning single-voiced; a pattern with fewer
+	// than two personas has nobody to deliberate with.
+	if style, personas := panelCall(c.Plan); style != "" && len(personas) >= 2 && c.Runtime.Panel != nil {
+		decision, err = c.Runtime.Panel.Convene(c.Ctx, c.Runtime, personas, c.Intent, style)
+	} else {
+		decision, err = c.Runtime.Reasoner.Reason(c.Ctx, c.Runtime, c.Intent, c.Plan, c.Research)
+	}
 	if err != nil {
 		return err
 	}

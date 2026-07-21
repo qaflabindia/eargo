@@ -236,6 +236,84 @@ var ChooseToolAction = Signature[ChooseToolIn, ChooseToolOut]{
 	CacheBoundary: "gathered",
 }
 
+// -- panel deliberation -----------------------------------------------------
+
+type ChooseSpeakerIn struct {
+	IntentText string `ear:"intent_text,What the panel is deliberating"`
+	Pattern    string `ear:"pattern,The authored deliberation pattern, in plain English"`
+	Personas   string `ear:"personas,One 'name: instructions' line per persona at the table"`
+	Transcript string `ear:"transcript,The turns so far, speakers bracketed"`
+}
+type ChooseSpeakerOut struct {
+	Speaker   string `ear:"speaker,Exactly one listed persona's name, or 'conclude'"`
+	Rationale string `ear:"rationale,One sentence: why this speaker, or why the panel is done"`
+}
+
+// ChooseNextSpeaker moderates the panel: who speaks next, or conclude.
+var ChooseNextSpeaker = Signature[ChooseSpeakerIn, ChooseSpeakerOut]{
+	Instruction: "Moderate a panel deliberation: read the authored pattern, the personas at the table and the " +
+		"transcript so far, and choose who should speak next -- or whether the panel has genuinely converged " +
+		"and should conclude. Answer with exactly one listed persona's name, or 'conclude' when another turn " +
+		"would add nothing; when the pattern prescribes an order, follow it.",
+}
+
+type PanelSpeakIn struct {
+	IntentText string `ear:"intent_text,What the panel is deliberating"`
+	Persona    string `ear:"persona,Who is speaking: instructions and stacked skills"`
+	Pattern    string `ear:"pattern,The authored deliberation pattern, in plain English"`
+	Transcript string `ear:"transcript,The turns so far, speakers bracketed"`
+}
+type PanelSpeakOut struct {
+	Statement string `ear:"statement,This persona's turn, a few sentences"`
+}
+
+// SpeakInPanel speaks one turn, entirely as the given persona.
+var SpeakInPanel = Signature[PanelSpeakIn, PanelSpeakOut]{
+	Instruction: "Speak one turn in a panel deliberation, entirely as the given persona: follow its standing " +
+		"instructions and stacked skills, engage concretely with what earlier speakers said (agree, challenge, " +
+		"or add -- never merely restate), honor the authored deliberation pattern, and keep the turn to a few " +
+		"sentences.",
+}
+
+type SpeakOrToolIn struct {
+	IntentText string `ear:"intent_text,What the panel is deliberating"`
+	Persona    string `ear:"persona,Who is speaking: instructions and stacked skills"`
+	Pattern    string `ear:"pattern,The authored deliberation pattern, in plain English"`
+	Transcript string `ear:"transcript,The turns so far, speakers bracketed"`
+	Tools      string `ear:"tools,One 'name(parameters): description' line per available tool"`
+	Gathered   string `ear:"gathered,Facts gathered by tool calls this turn, or 'none yet'"`
+}
+type SpeakOrToolOut struct {
+	Tool      string            `ear:"tool,The name of the one tool to call now, or empty to speak instead"`
+	Arguments map[string]string `ear:"arguments,The tool's arguments as '- name: value' bullets; empty when speaking"`
+	Statement string            `ear:"statement,This persona's turn, given only when no tool is called"`
+}
+
+// SpeakOrUseTool: within a panel turn, call one tool for facts or speak.
+var SpeakOrUseTool = Signature[SpeakOrToolIn, SpeakOrToolOut]{
+	Instruction: "You are one persona taking a turn in a panel deliberation and may use tools to get facts " +
+		"before speaking. If a tool would ground your turn, call exactly one -- name it and give its arguments. " +
+		"Otherwise speak the turn, entirely as the persona, engaging with the transcript. Never invent a tool " +
+		"that is not listed.",
+	CacheBoundary: "gathered",
+}
+
+type SynthesizeIn struct {
+	IntentText string `ear:"intent_text,What the panel deliberated"`
+	Pattern    string `ear:"pattern,The authored deliberation pattern, in plain English"`
+	Transcript string `ear:"transcript,The full deliberation, speakers bracketed"`
+}
+type SynthesizeOut struct {
+	Decision string `ear:"decision,The panel's single concluded decision, with its reasoning"`
+}
+
+// SynthesizePanel concludes the deliberation into one decision.
+var SynthesizePanel = Signature[SynthesizeIn, SynthesizeOut]{
+	Instruction: "Conclude a panel deliberation into one decision: weigh what each speaker established, " +
+		"resolve disagreements the way the authored pattern directs, and state the single concrete outcome " +
+		"with the decisive reasoning -- never a hedge between positions.",
+}
+
 // -- memory / adaptation ----------------------------------------------------
 
 type SummarizeIn struct {

@@ -32,7 +32,7 @@ modules, ~21.5k lines). Update the marks as work lands.
 - ✅ `skill` — Skill, instruction fallback, markdown
 - ✅ `persona` — Persona, skill stacking
 - ✅ `step` — Step, delegation
-- 🟡 `workflow` — steps/policies/contract/RetryBudget ✅; `Pattern:`/`Routes:` parsed but **inert** (need Panel/Journey)
+- 🟡 `workflow` — steps/policies/contract/RetryBudget ✅; **`Pattern:` wired** (convenes a `Panel` when the scheduled plan carries a pattern and ≥2 personas); `Routes:` parsed but inert (needs Journey)
 - ✅ `process` — Process, workflow stacking
 - ✅ `tool` — Tool data model + describe
 - ✅ `contract` — structural `Judge` + `_formalize` skip (no model) ✅; **LLM field extraction + `JudgeContractConformance` + hinted retry wired** (`contract.go`, formalize stage)
@@ -72,7 +72,7 @@ binding a model lights up the ported signatures with no pipeline change.
 ## 3. DSPy layer (EAR's native structured prompting)
 
 - ✅ `judgment` — `judgment.go`: Field/Kind/Judgment, render, parse, Prediction, cache boundary
-- ✅ `signatures` — 13 typed `Signature[In,Out]` ported, **all 13 wired**
+- ✅ `signatures` — typed `Signature[In,Out]` catalogue, all wired (13 core + ChooseToolAction/SelectRelevantPassages/GistPassage + the four panel signatures: ChooseNextSpeaker/SpeakInPanel/SpeakOrUseTool/SynthesizePanel)
   (policy, reason, discover, select, schedule, delegate, recall, explain,
   audit, contract-conformance, summarize, distill, rank-skills); ~20 more
   Python signatures not yet ported
@@ -106,7 +106,7 @@ binding a model lights up the ported signatures with no pipeline change.
 
 **Distributed / infra / persistence:** ⬜ `kernel` ⬜ `k8s` ⬜ `sandbox` ⬜ `store` ✅ `session_store` ✅ `run` (as the `ear` CLI: run/repl/inspect/trail/usage/verify, governed exit codes) ⬜ `mcp_client` ⬜ `mcp_server` ⬜ `mcp_command_centre`
 
-**Enterprise-AGI / governance / cognition planes:** ⬜ `enterprise` ⬜ `authority` ⬜ `compiler` ⬜ `journey` ⬜ `examiner` ✅ `knowledge` ⬜ `knowledge_governance` ⬜ `evolution` ⬜ `evolution_loop` ⬜ `optimizer` ⬜ `acquirer` ⬜ `coder` ⬜ `epistemic` ⬜ `adversary` ⬜ `panel` ⬜ `goal` ✅ `spawner` ✅ `tool_binder` ⬜ `tools_cli` ⬜ `identity` ⬜ `task` ⬜ `exchange` ⬜ `thrift` ⬜ `carbon` ⬜ `energy` ⬜ `hardware` ⬜ `caveman` ⬜ `router`
+**Enterprise-AGI / governance / cognition planes:** ⬜ `enterprise` ⬜ `authority` ⬜ `compiler` ⬜ `journey` ⬜ `examiner` ✅ `knowledge` ⬜ `knowledge_governance` ⬜ `evolution` ⬜ `evolution_loop` ⬜ `optimizer` ⬜ `acquirer` ⬜ `coder` ⬜ `epistemic` ⬜ `adversary` ✅ `panel` ⬜ `goal` ✅ `spawner` ✅ `tool_binder` ⬜ `tools_cli` ⬜ `identity` ⬜ `task` ⬜ `exchange` ⬜ `thrift` ⬜ `carbon` ⬜ `energy` ⬜ `hardware` ⬜ `caveman` ⬜ `router`
 
 **Reconceived / already covered:** 🔵 `parallel` → `parallelMap` · ✅ `approval` → `ApprovalVerdict`
 

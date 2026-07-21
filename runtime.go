@@ -113,6 +113,11 @@ type Runtime struct {
 	// strategy so an authored "up to 3 subagents" limit is enforced.
 	Spawner *Spawner
 
+	// Panel convenes multi-persona deliberation when a scheduled workflow
+	// carries an authored `Pattern:`. Always set by NewRuntime; adjust its
+	// Rounds/MaxTurns to re-budget the conversation.
+	Panel *Panel
+
 	// trailFile is the loader-opened persisted trail (memory.md's
 	// `## Reasoning Audit Trail`), held so Close can release it.
 	trailFile *TrailFile
@@ -141,6 +146,7 @@ func NewRuntime(name string, opts ...Option) *Runtime {
 		PolicyJudge:  DeterministicJudge{},
 		AdaptEvery:   5,
 		ToolBinder:   NewToolBinder(),
+		Panel:        &Panel{},
 	}
 	r.Pipeline = defaultPipeline()
 	for _, opt := range opts {
