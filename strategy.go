@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Strategy is the runtime's operating strategy, stacked in memory.md. This
@@ -85,6 +86,31 @@ type Strategy struct {
 	// the first cycle, and saves back after every cycle. Empty when no
 	// persistence is declared -- the runtime then starts cold, as before.
 	CrossSessionPath string
+
+	// Schedule is the raw prose of memory.md's `## Scheduled Work` section,
+	// and ScheduledWork the standing work parsed out of it -- the recurring
+	// intents a Kernel arms when it registers this stack as an instance. Empty
+	// when none is declared: a stack with no authored schedule runs only the
+	// work a caller submits, exactly as before.
+	Schedule      string
+	ScheduledWork []ScheduledWork
+}
+
+// ScheduledWork is one authored standing task: an intent, and how often the
+// enterprise wants it run.
+//
+// This is the same discipline as the budget, the pricing and the model
+// binding: the enterprise declares its recurring work in memory.md, in plain
+// English, rather than someone coding a timer. The Kernel reads it; nothing
+// here decides anything.
+//
+//	## Scheduled Work
+//
+//	- Every 15 minutes, reason "Sweep the overnight application queue."
+//	- Every 24 hours, reason "Produce the daily underwriting summary."
+type ScheduledWork struct {
+	Every  time.Duration
+	Intent string
 }
 
 // Dollars returns the declared cost of a token spend and whether pricing was
@@ -232,6 +258,9 @@ func StrategyFromMarkdown(text string) *Strategy {
 		case strings.Contains(heading, "pricing") || strings.Contains(heading, "price") ||
 			strings.Contains(heading, "cost"):
 			s.readPricing(prose)
+		case strings.Contains(heading, "schedul") || strings.Contains(heading, "standing work") ||
+			strings.Contains(heading, "recurring"):
+			s.readSchedule(body)
 		case strings.Contains(heading, "knowledge"):
 			s.readKnowledge(body)
 		case strings.Contains(heading, "cross session") || strings.Contains(heading, "persist"):
@@ -366,6 +395,98 @@ func (s *Strategy) readSubagents(prose string) {
 			s.MaxSubagents, _ = strconv.Atoi(m[1])
 		}
 	}
+}
+
+// periodRe reads an authored recurrence: "every 15 minutes", "every hour",
+// "every 24 hours". A bare unit means one of it.
+var periodRe = regexp.MustCompile(`(?i)\bevery\s+(?:(\d+)\s*)?(second|minute|hour|day|week)s?\b`)
+
+// quotedRe reads the intent out of a scheduled-work bullet. Straight and
+// typographic quotes both, since memory.md is written by people.
+var quotedRe = regexp.MustCompile(`["\x{201c}]([^"\x{201d}]+)["\x{201d}]`)
+
+// readSchedule parses the standing work bulleted under `## Scheduled Work`.
+// A bullet with no readable period is skipped rather than guessed at: an
+// enterprise that mis-writes a recurrence gets no task, not a task firing on
+// a cadence nobody authored.
+func (s *Strategy) readSchedule(body Body) {
+	s.Schedule = body.Prose
+	for _, bullet := range body.Bullets {
+		every := parsePeriod(bullet)
+		if every <= 0 {
+			continue
+		}
+		intent := scheduledIntent(bullet)
+		if intent == "" {
+			continue
+		}
+		s.ScheduledWork = append(s.ScheduledWork, ScheduledWork{Every: every, Intent: intent})
+	}
+}
+
+// parsePeriod turns an authored recurrence into a duration, or zero when the
+// text declares none.
+func parsePeriod(text string) time.Duration {
+	m := periodRe.FindStringSubmatch(text)
+	if m == nil {
+		return 0
+	}
+	count := 1
+	if m[1] != "" {
+		count, _ = strconv.Atoi(m[1])
+	}
+	if count <= 0 {
+		return 0
+	}
+	var unit time.Duration
+	switch strings.ToLower(m[2]) {
+	case "second":
+		unit = time.Second
+	case "minute":
+		unit = time.Minute
+	case "hour":
+		unit = time.Hour
+	case "day":
+		unit = 24 * time.Hour
+	case "week":
+		unit = 7 * 24 * time.Hour
+	default:
+		return 0
+	}
+	return time.Duration(count) * unit
+}
+
+// scheduledIntent pulls the intent text out of a scheduled-work bullet: the
+// quoted request if there is one, else whatever follows the recurrence clause.
+func scheduledIntent(bullet string) string {
+	if m := quotedRe.FindStringSubmatch(bullet); m != nil {
+		return strings.TrimSpace(m[1])
+	}
+	// No quotes: drop the "every ..." clause and any leading verb joining it
+	// to the request ("Every hour, reason about the queue" -> "about the
+	// queue" reads wrong, so keep the remainder whole and just trim glue).
+	rest := periodRe.ReplaceAllString(bullet, "")
+	rest = strings.TrimSpace(rest)
+	rest = strings.TrimLeft(rest, ",;:- \t")
+	for _, verb := range []string{"reason about", "reason", "run", "do"} {
+		if trimmed, ok := cutPrefixFold(rest, verb); ok {
+			rest = trimmed
+			break
+		}
+	}
+	return strings.TrimSpace(strings.TrimLeft(rest, ",;:- \t"))
+}
+
+// cutPrefixFold trims a leading word-boundary prefix, case-insensitively.
+func cutPrefixFold(s, prefix string) (string, bool) {
+	if len(s) < len(prefix) || !strings.EqualFold(s[:len(prefix)], prefix) {
+		return s, false
+	}
+	rest := s[len(prefix):]
+	if rest != "" && rest[0] != ' ' && rest[0] != ',' && rest[0] != ':' {
+		return s, false // matched mid-word, not a prefix
+	}
+	return strings.TrimSpace(rest), true
 }
 
 func (s *Strategy) readTools(body Body) {

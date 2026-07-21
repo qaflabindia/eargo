@@ -198,7 +198,8 @@ func (r *Runtime) EnforcePolicies(ctx context.Context, context map[string]any) (
 // returns the decision. It honours ctx: a cancelled or deadline-exceeded
 // context aborts the cycle at the next checkpoint and returns ctx.Err(). A
 // hard policy block returns *PolicyViolationError; a parked approval gate
-// returns *ApprovalRequiredError.
+// returns *ApprovalRequiredError; a claim on ctx that may not act as this
+// runtime's tenant returns *TenantBoundaryError before any stage runs.
 func (r *Runtime) Reason(ctx context.Context, intent Intent, approval *ApprovalVerdict) (decision any, err error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -214,6 +215,13 @@ func (r *Runtime) Reason(ctx context.Context, intent Intent, approval *ApprovalV
 		r.applyRetention()
 		r.persist()
 	}()
+
+	// The tenant boundary is checked before the pipeline, not inside it: a
+	// caller who may not act as this org never reaches the stack's processes,
+	// memory or tools at all.
+	if err := r.checkTenantBoundary(ctx); err != nil {
+		return nil, err
+	}
 
 	// Run the composable pipeline over one shared Cycle. Each stage checks
 	// ctx first, so a cancelled context aborts at the next stage boundary.
