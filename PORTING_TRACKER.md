@@ -22,7 +22,7 @@ modules, ~21.5k lines). Update the marks as work lands.
 | DSPy layer (engine/LM) | 5 | 1 | 0 | 0 | 0 |
 | Strategy / loader | 2 | 1 | 0 | 0 | 0 |
 | Go-idiom enhancements | 7 | 0 | 0 | 0 | 0 |
-| Category B (infra/AGI planes) | 5 | 0 | 0 | 1 | ~37 |
+| Category B (infra/AGI planes) | 8 | 0 | 0 | 1 | ~34 |
 
 ---
 
@@ -104,9 +104,9 @@ binding a model lights up the ported signatures with no pipeline change.
 
 **Servers / UI / observability:** ⬜ `server` ⬜ `dashboard` ⬜ `monitor` ⬜ `web` ⬜ `mail`
 
-**Distributed / infra / persistence:** ⬜ `kernel` ⬜ `k8s` ⬜ `sandbox` ⬜ `store` ✅ `session_store` ✅ `run` (as the `ear` CLI: run/repl/inspect/trail/usage/verify, governed exit codes) ⬜ `mcp_client` ⬜ `mcp_server` ⬜ `mcp_command_centre`
+**Distributed / infra / persistence:** ✅ `kernel` (process table + run queue + idle loop, fleet parallelism at one cycle per instance, dispatcher seam, `## Scheduled Work` authored in memory.md, `ear kernel` daemon) ⬜ `k8s` ⬜ `sandbox` ⬜ `store` ✅ `session_store` ✅ `run` (as the `ear` CLI: run/repl/inspect/trail/usage/verify/kernel, governed exit codes) ⬜ `mcp_client` ⬜ `mcp_server` ⬜ `mcp_command_centre`
 
-**Enterprise-AGI / governance / cognition planes:** ⬜ `enterprise` ⬜ `authority` ⬜ `compiler` ⬜ `journey` ⬜ `examiner` ✅ `knowledge` ⬜ `knowledge_governance` ⬜ `evolution` ⬜ `evolution_loop` ⬜ `optimizer` ⬜ `acquirer` ⬜ `coder` ⬜ `epistemic` ⬜ `adversary` ✅ `panel` ⬜ `goal` ✅ `spawner` ✅ `tool_binder` ⬜ `tools_cli` ⬜ `identity` ⬜ `task` ⬜ `exchange` ⬜ `thrift` ⬜ `carbon` ⬜ `energy` ⬜ `hardware` ⬜ `caveman` ⬜ `router`
+**Enterprise-AGI / governance / cognition planes:** ⬜ `enterprise` ⬜ `authority` ⬜ `compiler` ⬜ `journey` ⬜ `examiner` ✅ `knowledge` ⬜ `knowledge_governance` ⬜ `evolution` ⬜ `evolution_loop` ⬜ `optimizer` ⬜ `acquirer` ⬜ `coder` ⬜ `epistemic` ⬜ `adversary` ✅ `panel` ⬜ `goal` ✅ `spawner` ✅ `tool_binder` ⬜ `tools_cli` ⬜ `identity` ⬜ `task` ⬜ `exchange` ⬜ `thrift` ⬜ `carbon` ⬜ `energy` ⬜ `hardware` ⬜ `caveman` ⬜ `router` ✅ `identity` (Claim + tenant boundary, carried on `context.Context`) ✅ `task` (as `kernel.Task`)
 
 **Reconceived / already covered:** 🔵 `parallel` → `parallelMap` · ✅ `approval` → `ApprovalVerdict`
 
@@ -120,6 +120,12 @@ binding a model lights up the ported signatures with no pipeline change.
 4. ~~Dollar costing~~ ✅ **done** — `## Pricing` parsed, `Strategy.Dollars`, `~$X` on the usage record; plus a non-blocking `BudgetMonitor`.
 5. ~~Tooling~~ ✅ **done** — governed tool binder + native reasoner tool-use loop (slices 1-2).
 6. ~~Persistence~~ ✅ **done** — `SessionStore` (markdown + JSON codecs) with `## Cross-Session Data` authored path, restore-before-first-cycle + save-after-each-cycle wiring.
-7. Then category-B planes as needed (MCP, server, store catalogue backends).
+7. ~~Kernel~~ ✅ **done** — the control plane: process table, run queue, idle loop, `## Scheduled Work` authored in memory.md, `identity.Claim` enforced at the cycle boundary, `ear kernel` running it persistently.
+8. Then category-B planes as needed (MCP, server, store catalogue backends).
 
-_Last reviewed: port through the composable `[]Stage` pipeline + typed generic signatures._
+**Verification.** As of the kernel slice the whole repo is verified locally on
+Go 1.26.5: `go build ./...`, `go vet ./...`, `gofmt -l .` all clean, `go test
+./...` and `go test -race ./...` green across both packages, and the two
+benchmarks run. The ✅ marks above mean tested in that sense.
+
+_Last reviewed: the Kernel slice — control plane, identity boundary, authored schedule._

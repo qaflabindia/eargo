@@ -10,6 +10,7 @@
 //	ear trail <stack-dir|trail-file>         render the persisted reasoning trail
 //	ear usage <stack-dir|trail-file>         the usage ledger from the persisted trail
 //	ear verify <stack-dir|trail-file>        prove the trail's hash chain unbroken
+//	ear kernel <stack-dir>...                run stacks as a persistent scheduled runtime
 //	ear demo                                 run the built-in demonstration stack
 //
 // Exit codes: 0 decided (or command succeeded), 1 blocked by policy (or a
@@ -56,6 +57,8 @@ func run(args []string) int {
 		return cmdUsage(rest)
 	case "verify":
 		return cmdVerify(rest)
+	case "kernel":
+		return cmdKernel(rest)
 	case "demo":
 		return cmdDemo(rest)
 	case "help", "-h", "--help":
@@ -78,6 +81,7 @@ usage:
   ear trail <stack-dir|trail-file>         render the persisted reasoning trail
   ear usage <stack-dir|trail-file>         the usage ledger from the persisted trail
   ear verify <stack-dir|trail-file>        prove the trail's hash chain unbroken
+  ear kernel <stack-dir>...                run stacks as a persistent scheduled runtime
   ear demo                                 run the built-in demonstration stack
   ear help                                 this help
 
@@ -89,6 +93,14 @@ run flags:
   -note text        a note attached to the verdict
   -name text        override the runtime name (default: the stack's title)
   -json             machine output: one JSON object on stdout
+
+kernel flags:
+  -workers N        how many different instances may run concurrently (-1 = one per CPU)
+  -subject name     act as this identity (requires -org)
+  -org a,b          the org ids that identity may act as
+  -once             arm and drain the due work once, then exit
+  -status-every d   print a process-table snapshot on this period
+  -json             machine output: one JSON object per dispatch
 
 exit codes: 0 decided, 1 blocked by policy (or broken trail chain), 2 error, 3 parked for approval
 `)

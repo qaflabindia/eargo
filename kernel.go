@@ -255,7 +255,11 @@ func (k *Kernel) Submit(instance string, intent Intent, opts ...TaskOption) *Tas
 //
 // A runtime with no strategy, or a strategy with no authored schedule, arms
 // nothing and reports no error -- an unscheduled stack is a normal stack.
-func (k *Kernel) Arm(name string) ([]*Task, error) {
+//
+// Each armed task is due one period out, as a timer should be. Options are
+// applied after that default, so StartAfter(0) arms the same authored work due
+// immediately -- what an operator wants from a one-shot run of the schedule.
+func (k *Kernel) Arm(name string, opts ...TaskOption) ([]*Task, error) {
 	rt, ok := k.Instance(name)
 	if !ok {
 		return nil, fmt.Errorf("no such instance %q", name)
@@ -265,7 +269,7 @@ func (k *Kernel) Arm(name string) ([]*Task, error) {
 	}
 	var armed []*Task
 	for _, work := range rt.Strategy.ScheduledWork {
-		armed = append(armed, k.Schedule(name, NewIntent(work.Intent, nil), work.Every))
+		armed = append(armed, k.Schedule(name, NewIntent(work.Intent, nil), work.Every, opts...))
 	}
 	return armed, nil
 }

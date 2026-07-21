@@ -205,6 +205,7 @@ go build -o ear ./cmd/ear
 ./ear trail <stack>         # the persisted reasoning trail, readable
 ./ear usage <stack>         # the usage ledger from a persisted JSONL trail
 ./ear verify <stack>        # prove the trail's hash chain unbroken
+./ear kernel <stack>...     # run stacks as a persistent scheduled runtime
 ./ear demo                  # zero-setup built-in stack
 ```
 
@@ -216,6 +217,68 @@ The trail declared in memory.md's `## Reasoning Audit Trail` persists to
 disk (markdown or JSONL by extension), hash-chained across sessions and
 tamper-evident: `ear verify` names the exact record where an altered trail
 first breaks.
+
+## The kernel: a runtime the enterprise operates
+
+`ear run` reasons once and exits. `ear kernel` is the same runtime made
+persistent — the difference between a library you call and something an
+enterprise operates.
+
+The Kernel is a scheduler: a **process table** of named `Runtime` instances,
+each with its own memory, tenant and hash-chained trail, and a **run queue**
+of tasks over them. Its loop is a kernel's idle loop — while there is work,
+dispatch it; otherwise sleep until an interrupt. The interrupt line is a
+buffered channel and the timer a `time.Timer`, so a stack that runs hourly
+costs nothing for the other fifty-nine minutes.
+
+**Nothing in the kernel reasons.** It decides only *when* work runs; the
+judgment stays in the instances, and dispatch goes through their normal
+cycle — so policies still gate it, the tenant boundary still refuses it, the
+trail still records it and the session store still persists it. That
+separation is what makes it safe for this to be the component that never
+stops.
+
+**Standing work is authored, not coded.** The same discipline already used
+for the budget, the pricing and the model binding:
+
+```markdown
+## Scheduled Work
+
+- Every 15 minutes, reason "Sweep the overnight application queue."
+- Every 24 hours, reason "Produce the daily underwriting summary."
+```
+
+```sh
+./ear kernel stacks/underwriting stacks/collections -workers 2
+./ear kernel stacks/underwriting -once            # run the schedule once and exit
+./ear kernel stacks/underwriting -subject svc:nightly -org acme
+```
+
+**Governance is not failure.** A violated policy, a parked approval gate, a
+refused tenant boundary and a denied spawn all land `blocked`; only a
+genuine fault lands `failed`, and one task's failure never takes the kernel
+down. A panic in a seam is recovered at the dispatch boundary — in Go it
+would otherwise reach the goroutine boundary and kill the process, which for
+a control plane meant never to stop is the one unacceptable failure mode.
+
+**Identity closes the boundary scheduled work needs.** A `Claim` carries a
+caller's subject and the orgs they may act as; `Runtime.Reason` refuses a
+foreign one before any stage runs, recording the attempt on the trail first.
+Python threads the claim as a parameter through `reason()` and
+`Kernel.submit()`; here it rides `context.Context`, already threaded through
+every stage, seam, tool call and spawn — so the boundary travels with the
+work and no existing signature changed. No claim supplied is not a
+violation, the same off-unless-declared posture as `Tenant` itself.
+
+**Fleet parallelism keeps one cycle per instance.** `-workers N` fans ready
+work across *different* instances while serializing work *within* one, so
+each instance stays the single writer of its own memory and hash-chained
+trail. Both halves are tested: peak concurrency per instance never exceeds
+one, and separate instances do genuinely overlap.
+
+`Kernel.Dispatcher` is an execution seam — set it and each firing runs
+wherever you send it (a remote executor, a job queue, a pod) while the
+Kernel stays the single scheduler.
 
 ## Test
 
