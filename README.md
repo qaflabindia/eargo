@@ -1,7 +1,7 @@
 # EAR (Go) — a Go port of the Enterprise Agentic Runtime
 
-This directory is a Go port of [EAR](../README.md), the Enterprise Agentic
-Runtime. It keeps EAR's authoring model — prompts stacked into skills,
+This is a Go port of [EAR](https://github.com/qaflabindia/EAR), the
+Enterprise Agentic Runtime. It keeps EAR's authoring model — prompts stacked into skills,
 skills into personas, personas into workflows, workflows into processes,
 governed by policy, orchestrated by a runtime — and its plain-English,
 markdown-native stack, while running natively on Go's standard library.
@@ -196,7 +196,7 @@ decision, err := rt.Reason(context.Background(), intent, nil)
 ```sh
 go build -o ear ./cmd/ear
 
-./ear run ../examples/credit_risk_stack \
+./ear run examples/credit_risk_stack \
     "Underwrite a $20,000 consumer loan application" \
     loan_amount=20000 debt_to_income=0.28 credit_score=742
 ./ear run <stack> "<intent>" [k=v ...] -approve -approver riya   # answer a parked gate

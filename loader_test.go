@@ -15,9 +15,13 @@ import (
 // (.ear and the like) is not copied; each test starts the stack cold.
 func copyExampleStack(t *testing.T) string {
 	t.Helper()
-	src := filepath.Join("..", "examples", "credit_risk_stack")
+	src := filepath.Join("examples", "credit_risk_stack")
+	// The fixture ships in this repo, so its absence is a broken checkout, not
+	// a reason to skip. These are the only tests that drive the real authored
+	// markdown end to end; silently skipping them would retire that coverage
+	// without anyone noticing.
 	if _, err := os.Stat(filepath.Join(src, "policy.md")); err != nil {
-		t.Skipf("example stack not present: %v", err)
+		t.Fatalf("example stack missing from the repository: %v", err)
 	}
 	dst := t.TempDir()
 	err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {

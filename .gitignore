@@ -1,0 +1,26 @@
+# Compiled binaries. `go build -o ear ./cmd/ear` in the repo root is the
+# documented way to try the CLI, so the result must never be committable.
+/ear
+*.exe
+*.test
+*.out
+
+# Go tooling
+vendor/
+coverage.txt
+coverage.html
+
+# Runtime state EAR itself writes: the persisted audit trail, the
+# cross-session store, and anything else a stack declares under `.ear/`.
+# Running a stack must never dirty the fixture it ran against.
+.ear/
+
+# Credentials. memory.md only ever names the env var holding a key, never
+# the key -- keep it that way on disk too.
+.env
+.env.*
+!.env.example
+*.key
+key.txt
+
+.DS_Store

@@ -1,9 +1,11 @@
 # EAR (Go) — Architecture
 
-A fresh review of the Go port (`go/`, ~2,900 LOC + tests, one flat package
-`ear`). Read alongside [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md)
-(the Python architecture this maps to) and
-[`PORTING_TRACKER.md`](PORTING_TRACKER.md) (what is / isn't ported).
+A review of the Go port (~10,500 LOC + ~4,000 of tests, one flat package
+`ear`). Read alongside the Python package's public docs --
+[CONCEPTS.md](https://github.com/qaflabindia/EAR/blob/main/docs/CONCEPTS.md)
+and [GOVERNANCE.md](https://github.com/qaflabindia/EAR/blob/main/docs/GOVERNANCE.md),
+the model this maps to -- and [`PORTING_TRACKER.md`](PORTING_TRACKER.md)
+(what is / isn't ported).
 
 ## Thesis
 
