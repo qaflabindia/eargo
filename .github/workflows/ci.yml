@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: build, vet, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      # gofmt exits 0 whether or not it finds anything, so the check is
+      # whether it named any files.
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "these files are not gofmt-clean:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -count=1 ./...
+
+      - name: Test (race)
+        run: go test -race -count=1 ./...
+
+      # The example stack drives the loader and pipeline end to end. It has
+      # silently skipped before; fail the build if that ever recurs.
+      - name: No test may skip
+        run: |
+          if go test -count=1 -v ./... | grep -E '^--- SKIP'; then
+            echo "a test skipped; skipped coverage is absent coverage"
+            exit 1
+          fi
+
+  zero-dependencies:
+    name: standard library only
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      # EAR's dependency-free ethos is a property worth enforcing, not just
+      # documenting: go.mod must declare no third-party requirements.
+      - name: Assert no third-party modules
+        run: |
+          if grep -qE '^\s*require' go.mod; then
+            echo "go.mod has grown a dependency:"
+            grep -A20 'require' go.mod
+            exit 1
+          fi
+          echo "go.mod declares no third-party requirements"
