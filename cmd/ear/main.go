@@ -12,6 +12,7 @@
 //	ear verify <stack-dir|trail-file>        prove the trail's hash chain unbroken
 //	ear kernel <stack-dir>...                run stacks as a persistent scheduled runtime
 //	ear serve <stack-dir>...                 run the control plane as an HTTP service
+//	ear monitor <trails-dir>                 render fleet health from a directory of trails
 //	ear demo                                 run the built-in demonstration stack
 //
 // Exit codes: 0 decided (or command succeeded), 1 blocked by policy (or a
@@ -62,6 +63,8 @@ func run(args []string) int {
 		return cmdKernel(rest)
 	case "serve":
 		return cmdServe(rest)
+	case "monitor":
+		return cmdMonitor(rest)
 	case "demo":
 		return cmdDemo(rest)
 	case "help", "-h", "--help":
@@ -86,6 +89,7 @@ usage:
   ear verify <stack-dir|trail-file>        prove the trail's hash chain unbroken
   ear kernel <stack-dir>...                run stacks as a persistent scheduled runtime
   ear serve <stack-dir>...                 run the control plane as an HTTP service
+  ear monitor <trails-dir>                 render fleet health from a directory of trails
   ear demo                                 run the built-in demonstration stack
   ear help                                 this help
 

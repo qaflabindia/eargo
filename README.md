@@ -432,6 +432,51 @@ The decisive test is that a library and a stacked directory holding the same
 authored text reason to the same governed outcomes — if those ever diverge,
 the catalogue has drifted.
 
+## The monitor: one definition of health, two ways to look at it
+
+The dashboard is the board you open in a browser; the monitor is the wall of
+screens in the control room. Both read the *same* distilled model, because
+health has to have one definition — a number that appears in one view and not
+the other is a number nobody can act on. `monitor.go` computes it; the views
+only render it.
+
+```sh
+./ear monitor trails/          # a directory of .jsonl trails, one per instance
+```
+
+```
+EAR FLEET  2026-07-22 07:47:54  ATTENTION
+──────────────────────────────────────────────────────────────────────────────
+2 instance(s)   2 cycles   0 tokens   $0.0000   1 blocked   1 pending   0 failed
+
+  INSTANCE       STATUS     FRESH    CYCLES   TOKENS ACTIVITY   REASON
+  collections    attention  active        1        0 ▁          1 awaiting approval
+  underwriting   healthy    active        1        0 ▁          all clear
+```
+
+Over the wire it is `GET /fleet` on the server, the same model as JSON.
+
+**A policy block is healthy, not a fault.** Governance refusing something is
+the system working; the block is surfaced as a *count*, and the instance
+stays green. The only hard fault is a broken hash chain — the one condition
+under which the record itself cannot be trusted. Reporting routine blocks as
+faults would train operators to ignore the one signal that means *a human
+must act*, so the classifier is deliberate about the difference.
+
+**The fleet sorts worst-first** and is only as well as its least-well
+instance, so the thing needing attention is always at the top.
+
+**A dispatch failure comes from the kernel, not the trail.** A cycle that
+panicked never wrote a record saying so — which is exactly why the scheduler
+keeps its own history — so fleet health folds the kernel's dispatch failures
+in on top of what the trails show.
+
+**A trail read from disk is verified with the file-canonical verifier.** The
+in-memory chain check re-marshals each record, and the JSON key order need
+not match the bytes the file stored, so `InspectTrailFile` uses `VerifyTrail`
+— reproducing the stored bytes — rather than reporting every read-back trail
+as broken. There is a regression test for exactly that.
+
 ## Test
 
 ```sh

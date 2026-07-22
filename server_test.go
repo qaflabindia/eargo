@@ -442,3 +442,39 @@ func TestServerEndToEndOverHTTP(t *testing.T) {
 		t.Errorf("want decided over the wire, got %v", decoded)
 	}
 }
+
+func TestServerFleetEndpoint(t *testing.T) {
+	s, _ := newTestServer(t)
+	ctx := context.Background()
+	// A compliant cycle and a blocked one, so the fleet has something to show.
+	s.Handle(ctx, http.MethodPost, "/instances/desk/submit", map[string]any{
+		"intent": "Underwrite a small loan", "context": map[string]any{"loan_amount": 20000.0},
+	})
+	s.Handle(ctx, http.MethodPost, "/instances/desk/submit", map[string]any{
+		"intent": "Underwrite an oversized loan", "context": map[string]any{"loan_amount": 90000.0},
+	})
+
+	status, payload := s.Handle(ctx, http.MethodGet, "/fleet", nil)
+	if status != http.StatusOK {
+		t.Fatalf("fleet status = %d", status)
+	}
+	body := asMap(t, payload)
+	if body["status"] != "healthy" {
+		t.Errorf("a fleet with only policy blocks is healthy, got %v", body["status"])
+	}
+	instances, _ := body["instances"].([]map[string]any)
+	if len(instances) != 1 {
+		t.Fatalf("want 1 instance, got %d", len(instances))
+	}
+	if instances[0]["name"] != "desk" {
+		t.Errorf("instance name = %v", instances[0]["name"])
+	}
+	// The block is surfaced as a count, and the fleet stays healthy.
+	if blocked, _ := instances[0]["blocked"].(int); blocked != 1 {
+		t.Errorf("the policy block should be counted, got %v", instances[0]["blocked"])
+	}
+	if body["chain_intact"] != nil {
+		// chain_intact is per-instance, not fleet-level.
+		t.Errorf("chain_intact should not be a fleet field")
+	}
+}

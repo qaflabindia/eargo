@@ -169,6 +169,8 @@ func (s *Server) route(ctx context.Context, method string, parts []string, body 
 		return s.health(), nil
 	case method == http.MethodGet && equalPath(parts, "kernel"):
 		return snapshotPayload(s.Kernel.Snapshot()), nil
+	case method == http.MethodGet && equalPath(parts, "fleet"):
+		return fleetPayload(InspectFleet(s.Kernel, time.Now())), nil
 	case equalPath(parts, "instances"):
 		switch method {
 		case http.MethodGet:
@@ -644,6 +646,28 @@ func intValue(raw any) (int, error) {
 		return strconv.Atoi(v)
 	}
 	return 0, fmt.Errorf("not an integer")
+}
+
+// fleetPayload renders the fleet health for the /fleet endpoint -- the same
+// distilled model the terminal monitor draws, so the browser board and the
+// control-room wall never disagree about whether an instance is well.
+func fleetPayload(fleet FleetHealth) map[string]any {
+	instances := make([]map[string]any, 0, len(fleet.Instances))
+	for _, instance := range fleet.Instances {
+		instances = append(instances, map[string]any{
+			"name": instance.Name, "status": string(instance.Status), "reason": instance.Reason,
+			"freshness": string(instance.Freshness), "cycles": instance.Cycles,
+			"calls": instance.Calls, "tokens": instance.Tokens, "dollars": instance.Dollars,
+			"blocked": instance.Blocked, "pending": instance.Pending, "failed": instance.Failed,
+			"chain_intact": instance.ChainIntact, "spark": instance.Spark,
+		})
+	}
+	return map[string]any{
+		"status": string(fleet.Status()), "instances": instances,
+		"cycles": fleet.Cycles, "tokens": fleet.Tokens, "dollars": fleet.Dollars,
+		"blocked": fleet.Blocked, "pending": fleet.Pending, "failed": fleet.Failed,
+		"broken": fleet.Broken,
+	}
 }
 
 func snapshotPayload(snap Snapshot) map[string]any {

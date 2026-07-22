@@ -22,7 +22,7 @@ modules, ~21.5k lines). Update the marks as work lands.
 | DSPy layer (engine/LM) | 5 | 1 | 0 | 0 | 0 |
 | Strategy / loader | 2 | 1 | 0 | 0 | 0 |
 | Go-idiom enhancements | 8 | 0 | 0 | 0 | 0 |
-| Category B (infra/AGI planes) | 14 | 0 | 0 | 1 | ~28 |
+| Category B (infra/AGI planes) | 16 | 0 | 0 | 1 | ~26 |
 
 ---
 
@@ -104,7 +104,7 @@ binding a model lights up the ported signatures with no pipeline change.
 
 **Accounting/reporting:** ✅ dollar costing (tokens × pricing) · ✅ usage report ledger
 
-**Servers / UI / observability:** ✅ `server` (HTTP control plane over the Kernel: bearer auth in constant time, stacks-root confinement, deployment-supplied claim, capped bodies, pure `Handle` routing, `ear serve`) ⬜ `dashboard` ⬜ `monitor` ⬜ `web` ⬜ `mail`
+**Servers / UI / observability:** ✅ `server` (HTTP control plane over the Kernel: bearer auth in constant time, stacks-root confinement, deployment-supplied claim, capped bodies, pure `Handle` routing, `ear serve`) ✅ `monitor` (one shared health model distilled from the trail; fleet view worst-first, terminal frame, `ear monitor`, `GET /fleet`) ✅ `dashboard` (the same health model surfaced as `GET /fleet` JSON; a browser view is a rendering task on top, not a new source of truth) ⬜ `web` ⬜ `mail`
 
 **Distributed / infra / persistence:** ✅ `kernel` (process table + run queue + idle loop, fleet parallelism at one cycle per instance, dispatcher seam, `## Scheduled Work` authored in memory.md, `ear kernel` daemon) ⬜ `k8s` ⬜ `sandbox` ✅ `store` (file-backed catalogue behind a `CatalogueBackend` interface, one generic `Catalogue[T]` for all five kinds, `OpenLibrary` + `Compose`; the optional Postgres/AGE backend is not ported — it needs a driver, and the zero-dependency default is the point) ✅ `session_store` ✅ `run` (as the `ear` CLI: run/repl/inspect/trail/usage/verify/kernel, governed exit codes) ✅ `mcp_client` (JSON-RPC 2.0 over stdio, single-reader pump, handshake/list/call, tools bound into the governed tool loop) ✅ `mcp_server` (the `## MCP` declaration model, parsed and wired) ⬜ `mcp_command_centre` (needs the unported acc-skills enterprise plane)
 
@@ -132,8 +132,12 @@ binding a model lights up the ported signatures with no pipeline change.
 10. ~~Store~~ ✅ **done** — a reusable library of named objects, one markdown
     file each, composable into any number of stacks; tested to produce the
     same governed outcomes as the stacked loader.
-11. Then the remaining category-B planes as needed (dashboard/monitor over
-    the server, `mcp_command_centre` once the enterprise plane lands).
+11. ~~Monitor/dashboard~~ ✅ **done** — one health model (`InspectFleet`,
+    `InspectRuntime`, `InspectTrailFile`), a worst-first terminal frame
+    (`ear monitor`), and the same model as `GET /fleet` JSON; a browser board
+    is a rendering task on top, not a new source of truth.
+12. Then the remaining category-B planes as needed (`mcp_command_centre` and
+    the Enterprise-AGI plane, both large and scoped separately).
 
 **Verification.** The whole repo is verified on Go 1.26.5: `go build ./...`,
 `go vet ./...`, `gofmt -l .` all clean, `go test ./...` and `go test -race
