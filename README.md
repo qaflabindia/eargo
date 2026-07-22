@@ -137,7 +137,7 @@ The whole layer is tested end-to-end against `ScriptedLM` (no network), so
 the LLM path is exercised deterministically in CI.
 
 **Not yet ported** (infrastructure surfaces): the HTTP servers and
-dashboard, MCP client/server, the sandbox, Postgres/k8s backends, the
+dashboard, MCP client/server, the sandbox, k8s backends, the
 optimizer/evolution/acquirer planes, and the knowledge/BM25 retriever. The
 LLM-facing pipeline stages beyond the two runtime seams (discovery,
 selection, scheduling, delegation) have their signatures ported but are not
@@ -423,10 +423,30 @@ rather than its filename.
 One generic `Catalogue[T]` serves all five kinds, with the per-kind parsing
 and rendering supplied at construction — the same collapse the loader's
 `resolve[T]` makes for cross-references, where the Python package needs a
-class per kind. `CatalogueBackend` is an interface, so a database-backed
-catalogue swaps in as a constructor argument rather than a different code
-path. (Python's optional Postgres/AGE backend is deliberately not ported: it
-needs a driver, and the zero-dependency default is the point.)
+class per kind.
+
+`CatalogueBackend` is an interface, and the whole library is
+backend-agnostic: `NewLibrary(backends)` takes one backend per kind and wires
+the cross-references identically whatever backs each. Two backends ship — a
+file `Store`, and a `SQLBackend` over **any** `database/sql` driver:
+
+```go
+import _ "github.com/lib/pq"           // your driver, your import
+db, _ := sql.Open("postgres", dsn)
+library, _ := ear.SQLLibrary(db, "acme", ear.Postgres)   // $N placeholders
+```
+
+`database/sql` is itself the driver-agnostic wrapper, so the same catalogue
+lives in Postgres, SQLite or MySQL without a line of it changing — and the
+driver is *your* blank import, never this module's, so EAR keeps its zero
+third-party dependencies. `SQLBackend` speaks only portable SQL: values are
+parameterized, the table name is validated as an identifier, upsert is a
+delete-then-insert inside a transaction (the one spelling every database
+agrees on), and the placeholder style and schema DDL are configurable. It is
+tested against the real `database/sql` machinery through an in-memory driver,
+including that a database library and a file library holding the same authored
+text reason to the same governed outcomes — a catalogue cannot mean something
+different because it lives in Postgres rather than on disk.
 
 The decisive test is that a library and a stacked directory holding the same
 authored text reason to the same governed outcomes — if those ever diverge,

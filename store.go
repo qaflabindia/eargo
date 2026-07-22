@@ -323,42 +323,38 @@ type Library struct {
 	Processes *Catalogue[*Process]
 }
 
-// OpenLibrary opens a catalogue rooted at a directory, with one subdirectory
-// per kind (skills/, policies/, personas/, workflows/, processes/).
-//
-// The kinds are resolved in dependency order -- skills, then policies, then
-// the personas that reference skills, then the workflows that delegate to
-// personas and attach policies, then the processes that compose workflows --
-// because a cross-reference can only resolve against a catalogue already read.
-func OpenLibrary(root string) (*Library, error) {
-	open := func(kind string) (*Store, error) {
-		return NewStore(filepath.Join(root, kind))
-	}
+// LibraryBackends is one CatalogueBackend per kind. Any implementation of
+// CatalogueBackend works in any slot -- a file Store, a SQLBackend over any
+// database/sql driver, or something a deployment writes itself -- so the whole
+// library is backend-agnostic, not just each catalogue.
+type LibraryBackends struct {
+	Skills    CatalogueBackend
+	Policies  CatalogueBackend
+	Personas  CatalogueBackend
+	Workflows CatalogueBackend
+	Processes CatalogueBackend
+}
 
-	skillStore, err := open("skills")
-	if err != nil {
-		return nil, err
-	}
-	policyStore, err := open("policies")
-	if err != nil {
-		return nil, err
-	}
-	personaStore, err := open("personas")
-	if err != nil {
-		return nil, err
-	}
-	workflowStore, err := open("workflows")
-	if err != nil {
-		return nil, err
-	}
-	processStore, err := open("processes")
-	if err != nil {
-		return nil, err
+// NewLibrary assembles a library over five backends, resolving the kinds in
+// dependency order -- skills, then policies, then the personas that reference
+// skills, then the workflows that delegate to personas and attach policies,
+// then the processes that compose workflows -- because a cross-reference can
+// only resolve against a catalogue already read.
+//
+// This is the backend-agnostic core: OpenLibrary is the file convenience over
+// it, and a SQL deployment calls this directly with SQLBackends. The
+// resolution order and cross-reference wiring are identical whatever backs
+// each kind, so a catalogue cannot mean something different because it lives
+// in Postgres rather than on disk.
+func NewLibrary(backends LibraryBackends) (*Library, error) {
+	if backends.Skills == nil || backends.Policies == nil || backends.Personas == nil ||
+		backends.Workflows == nil || backends.Processes == nil {
+		return nil, fmt.Errorf("a library needs a backend for every kind (skills, policies, personas, workflows, processes)")
 	}
 
 	library := &Library{
-		Skills:   SkillCatalogue(skillStore),
-		Policies: PolicyCatalogue(policyStore),
+		Skills:   SkillCatalogue(backends.Skills),
+		Policies: PolicyCatalogue(backends.Policies),
 	}
 
 	skills, err := library.Skills.LoadAll()
@@ -370,20 +366,44 @@ func OpenLibrary(root string) (*Library, error) {
 		return nil, err
 	}
 
-	library.Personas = PersonaCatalogue(personaStore, skills)
+	library.Personas = PersonaCatalogue(backends.Personas, skills)
 	personas, err := library.Personas.LoadAll()
 	if err != nil {
 		return nil, err
 	}
 
-	library.Workflows = WorkflowCatalogue(workflowStore, personas, policies)
+	library.Workflows = WorkflowCatalogue(backends.Workflows, personas, policies)
 	workflows, err := library.Workflows.LoadAll()
 	if err != nil {
 		return nil, err
 	}
 
-	library.Processes = ProcessCatalogue(processStore, workflows)
+	library.Processes = ProcessCatalogue(backends.Processes, workflows)
 	return library, nil
+}
+
+// OpenLibrary opens a file-backed catalogue rooted at a directory, with one
+// subdirectory per kind (skills/, policies/, personas/, workflows/,
+// processes/). It is the file convenience over NewLibrary.
+func OpenLibrary(root string) (*Library, error) {
+	stores := LibraryBackends{}
+	for _, spec := range []struct {
+		kind string
+		into *CatalogueBackend
+	}{
+		{"skills", &stores.Skills},
+		{"policies", &stores.Policies},
+		{"personas", &stores.Personas},
+		{"workflows", &stores.Workflows},
+		{"processes", &stores.Processes},
+	} {
+		store, err := NewStore(filepath.Join(root, spec.kind))
+		if err != nil {
+			return nil, err
+		}
+		*spec.into = store
+	}
+	return NewLibrary(stores)
 }
 
 // Compose builds a Runtime from named processes in the library -- the point of
