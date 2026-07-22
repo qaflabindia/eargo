@@ -22,7 +22,7 @@ modules, ~21.5k lines). Update the marks as work lands.
 | DSPy layer (engine/LM) | 5 | 1 | 0 | 0 | 0 |
 | Strategy / loader | 2 | 1 | 0 | 0 | 0 |
 | Go-idiom enhancements | 8 | 0 | 0 | 0 | 0 |
-| Category B (infra/AGI planes) | 16 | 0 | 0 | 1 | ~26 |
+| Category B (infra/AGI planes) | 17 | 0 | 0 | 1 | ~25 |
 
 ---
 
@@ -108,7 +108,7 @@ binding a model lights up the ported signatures with no pipeline change.
 
 **Distributed / infra / persistence:** ✅ `kernel` (process table + run queue + idle loop, fleet parallelism at one cycle per instance, dispatcher seam, `## Scheduled Work` authored in memory.md, `ear kernel` daemon) ⬜ `k8s` ⬜ `sandbox` ✅ `store` (db-agnostic catalogue behind a `CatalogueBackend` interface, one generic `Catalogue[T]` for all five kinds; `NewLibrary(backends)` is backend-agnostic, with a file `Store` and a `SQLBackend` over any `database/sql` driver — Postgres/SQLite/MySQL — the caller registering the driver so the module stays zero-dependency; `OpenLibrary`/`SQLLibrary`/`Compose`) ✅ `session_store` ✅ `run` (as the `ear` CLI: run/repl/inspect/trail/usage/verify/kernel, governed exit codes) ✅ `mcp_client` (JSON-RPC 2.0 over stdio, single-reader pump, handshake/list/call, tools bound into the governed tool loop) ✅ `mcp_server` (the `## MCP` declaration model, parsed and wired) ⬜ `mcp_command_centre` (needs the unported acc-skills enterprise plane)
 
-**Enterprise-AGI / governance / cognition planes:** ⬜ `enterprise` ⬜ `authority` ⬜ `compiler` ⬜ `journey` ⬜ `examiner` ✅ `knowledge` ⬜ `knowledge_governance` ⬜ `evolution` ⬜ `evolution_loop` ⬜ `optimizer` ⬜ `acquirer` ⬜ `coder` ⬜ `epistemic` ⬜ `adversary` ✅ `panel` ⬜ `goal` ✅ `spawner` ✅ `tool_binder` ⬜ `tools_cli` ⬜ `exchange` ⬜ `thrift` ⬜ `carbon` ⬜ `energy` ⬜ `hardware` ⬜ `caveman` ⬜ `router` ✅ `identity` (Claim + tenant boundary, carried on `context.Context`) ✅ `task` (as `kernel.Task`)
+**Enterprise-AGI / governance / cognition planes:** ⬜ `enterprise` ✅ `authority` (capability envelopes: certify/probation/suspend/revoke/reinstate, HMAC-signed tamper-evident records, a non-waivable floor plus reason-first scope/tier, enforced through the one governance gate via a per-policy `Gate`; revocation immediate, backend-agnostic persistence) ⬜ `compiler` ⬜ `journey` ⬜ `examiner` ✅ `knowledge` ⬜ `knowledge_governance` ⬜ `evolution` ⬜ `evolution_loop` ⬜ `optimizer` ⬜ `acquirer` ⬜ `coder` ⬜ `epistemic` ⬜ `adversary` ✅ `panel` ⬜ `goal` ✅ `spawner` ✅ `tool_binder` ⬜ `tools_cli` ⬜ `exchange` ⬜ `thrift` ⬜ `carbon` ⬜ `energy` ⬜ `hardware` ⬜ `caveman` ⬜ `router` ✅ `identity` (Claim + tenant boundary, carried on `context.Context`) ✅ `task` (as `kernel.Task`)
 
 **Reconceived / already covered:** 🔵 `parallel` → `parallelMap` · ✅ `approval` → `ApprovalVerdict`
 

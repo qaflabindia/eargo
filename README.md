@@ -497,6 +497,60 @@ not match the bytes the file stored, so `InspectTrailFile` uses `VerifyTrail`
 — reproducing the stored bytes — rather than reporting every read-back trail
 as broken. There is a regression test for exactly that.
 
+## Authority: who may act at all
+
+A stack governs *whether* an action is allowed. The authority plane governs
+*who may act*. A non-human actor — a spawned persona, an MCP-attached command
+centre, an evolved workflow — must hold a **certified capability envelope**
+before the runtime's one governance gate will pass its intents.
+
+```go
+registry := ear.NewEnvelopeRegistry()
+registry.Backend = backend            // any CatalogueBackend: a file or a database
+ear.EnforceEnvelopes(runtime, registry, "")
+
+registry.Certify("svc:nightly", []string{"underwrite"}, 2, 0.8, "")   // scopes, max tier
+// … later, from anywhere …
+registry.Revoke("svc:nightly", "credential compromised")              // takes effect next cycle
+```
+
+Enforcement is an ordinary runtime-scope `Policy`, so it flows through the
+same choke point as everything else — there is no private governance path.
+An intent that names no acting agent is not applicable, the same
+off-unless-declared posture as `Claim` and `Tenant`.
+
+**Revocation is immediate.** The gate consults the *live* registry every
+cycle, so a revocation between two cycles is enforced on the very next one —
+tested directly.
+
+**The floor is not model-waivable.** Whether a certified, un-withdrawn,
+untampered envelope exists at all is decided deterministically *before* the
+judge is ever consulted — the model is never asked to reconsider a revoked
+credential, exactly as it is never asked to waive a human approval. *Above*
+the floor, whether the granted scopes and tier reach the requested action is
+a judgment: a bound model reasons over the envelope facts, and a
+deterministic check decides offline. Two tests pin the division — a
+maximally permissive judge still cannot resurrect a revoked envelope, but it
+*does* get to decide scope and tier on a live one.
+
+**Records are tamper-evident.** Each envelope carries a content signature
+over its authority-bearing fields (agent, certification, scopes, tier,
+standing). A record edited on disk — a status flipped back to active by hand
+— no longer verifies and fails the floor. With a signing secret (named by
+environment variable, never stored) the signature is an **HMAC-SHA256**, not
+the length-extension-prone hash-of-secret-plus-payload, and verification is
+constant-time. Every state transition re-signs, so a revoked envelope whose
+signature still said active is not a reachable state.
+
+The registry persists as one JSON blob through any `CatalogueBackend` — a
+file or, via the `SQLBackend`, any database — and every certify/revoke lands
+on the runtime's one audit spine beside the gate decisions it drives.
+
+The one integration seam is a per-policy `Gate` on `Policy`: the Go analog of
+subclassing `Policy.judge`, judged inside the same concurrent `govern`
+fan-out. It treats the shared context as read-only (enriching a copy), which
+the race detector confirms.
+
 ## Test
 
 ```sh

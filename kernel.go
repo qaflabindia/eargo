@@ -474,6 +474,10 @@ func (k *Kernel) dispatchAndRelease(ctx context.Context, task *Task) Dispatch {
 		k.mu.Lock()
 		delete(k.inFlight, task.Instance)
 		k.mu.Unlock()
+		// Wake the run loop: a freed instance may now let a recurring task
+		// whose turn came while it was busy dispatch. Without this the loop
+		// would have to spin to notice the instance became free.
+		k.interrupt()
 	}()
 	return k.dispatch(ctx, task)
 }
@@ -626,7 +630,13 @@ func (k *Kernel) Run(ctx context.Context) error {
 			return err
 		}
 		if parallel {
-			if k.submitReady(ctx, sem) == 0 && !k.busy() {
+			// Sleep whenever nothing new was launched -- even while cycles are
+			// in flight. A completing dispatch calls interrupt() to wake the
+			// loop, and untilNext bounds the sleep on the next timer, so a
+			// busy instance never means a hot spin. The earlier `&& !busy()`
+			// guard skipped the sleep while any cycle ran, spinning a whole
+			// CPU core until it finished.
+			if k.submitReady(ctx, sem) == 0 {
 				k.sleepUntilInterrupt(ctx)
 			}
 		} else if k.Tick(ctx) == nil {

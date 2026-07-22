@@ -1,6 +1,7 @@
 package ear
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -19,7 +20,23 @@ type Policy struct {
 	Approvers          []string
 	Escalation         string
 	EscalationDays     *float64
+
+	// Gate, when non-nil, is a custom judgment for this policy -- the Go analog
+	// of subclassing Policy.judge in the Python package. govern calls it in
+	// place of the runtime's PolicyJudge, passing that judge in so the Gate can
+	// delegate the model-judged part of its decision (an authority envelope,
+	// say, judging scope and tier above a deterministic, non-waivable floor).
+	//
+	// It must treat the context map as read-only -- policies are judged
+	// concurrently over one shared context, so a Gate that needs to enrich the
+	// context judges over a copy.
+	Gate PolicyGate `json:"-"`
 }
+
+// PolicyGate is a policy's own judgment: it receives the runtime's PolicyJudge
+// (to delegate any model-judged sub-decision), the policy, and the shared
+// read-only context, and returns whether the policy is satisfied.
+type PolicyGate func(ctx context.Context, base PolicyJudge, policy *Policy, context map[string]any) (complies bool, rationale string, err error)
 
 // ApproverAllowed reports whether approver may waive this gate. With no
 // declared allow-list anyone may; otherwise only a listed name/address,

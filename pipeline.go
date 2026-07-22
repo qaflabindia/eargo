@@ -45,7 +45,18 @@ func (r *Runtime) govern(ctx context.Context, policies []*Policy, intent Intent,
 		return nil, nil
 	}
 	results := parallelMap(ctx, policies, func(ctx context.Context, policy *Policy) judgment {
-		complies, rationale, err := r.PolicyJudge.Judge(ctx, policy, intent.Context)
+		// A policy carrying its own Gate is judged by it (delegating any
+		// model-judged part back to the runtime's PolicyJudge); everything
+		// else goes straight to the judge. The Gate treats the context as
+		// read-only, so this stays safe under the concurrent fan-out.
+		var complies bool
+		var rationale string
+		var err error
+		if policy.Gate != nil {
+			complies, rationale, err = policy.Gate(ctx, r.PolicyJudge, policy, intent.Context)
+		} else {
+			complies, rationale, err = r.PolicyJudge.Judge(ctx, policy, intent.Context)
+		}
 		return judgment{policy, complies, rationale, err}
 	})
 

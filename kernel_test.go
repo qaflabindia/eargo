@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -481,5 +482,47 @@ func TestKernelDrainRespectsMaxUnits(t *testing.T) {
 	}
 	if k.Pending() != 7 {
 		t.Errorf("want 7 still queued, got %d", k.Pending())
+	}
+}
+
+func TestKernelParallelRunSchedulesFreedInstancePromptly(t *testing.T) {
+	// Regression: a recurring task whose instance is busy must be picked up as
+	// soon as the instance frees, via the wake a completing dispatch fires --
+	// not by spinning the run loop until the next timer. The loop must also
+	// stay responsive and shut down cleanly under load.
+	k := &Kernel{Workers: 2}
+	var dispatches atomic.Int64
+	k.Dispatcher = func(ctx context.Context, task *Task, rt *Runtime) (DispatchStatus, string) {
+		dispatches.Add(1)
+		time.Sleep(5 * time.Millisecond) // each cycle outlasts the 1ms period
+		return StatusRan, "ok"
+	}
+	k.Register("sweeper", workingRuntime("sweeper"))
+	k.Schedule("sweeper", NewIntent("Sweep.", nil), time.Millisecond)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errc := make(chan error, 1)
+	go func() { errc <- k.Run(ctx) }()
+
+	// Let it run: the recurring task should fire repeatedly even though its
+	// instance is busy for most of each period.
+	deadline := time.After(2 * time.Second)
+	for dispatches.Load() < 5 {
+		select {
+		case <-deadline:
+			t.Fatalf("the parallel loop did not keep scheduling a busy instance's recurring task (got %d)", dispatches.Load())
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+
+	cancel()
+	select {
+	case err := <-errc:
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("want context.Canceled, got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run did not return after cancellation")
 	}
 }
