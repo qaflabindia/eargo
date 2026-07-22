@@ -22,7 +22,7 @@ modules, ~21.5k lines). Update the marks as work lands.
 | DSPy layer (engine/LM) | 5 | 1 | 0 | 0 | 0 |
 | Strategy / loader | 2 | 1 | 0 | 0 | 0 |
 | Go-idiom enhancements | 8 | 0 | 0 | 0 | 0 |
-| Category B (infra/AGI planes) | 17 | 0 | 0 | 1 | ~25 |
+| Category B (infra/AGI planes) | 17 | 0 | 0 | 1 | 26 |
 
 ---
 
